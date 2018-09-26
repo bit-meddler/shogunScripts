@@ -1,0 +1,8 @@
+# Python bytecode
+*.py[cdo]
+
+# Temp Files
+*.tmp
+
+# Secret Files
+*.secret
