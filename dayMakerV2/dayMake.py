@@ -37,18 +37,18 @@ class DayBuild( QtGui.QWidget ):
         
     def _updateCpUi( self ):
         # update combos
-        self._client_combo.clear() 
+        self._clients_combo.clear() 
         self._project_combo.clear()
-        self._client_combo.addItems( self.client_list )
-        self._client_combo.setCurrentIndex( self.client_idx )
+        self._clients_combo.addItems( self.client_list )
         self._project_combo.addItems( self.project_list )
+        self._clients_combo.setCurrentIndex( self.client_idx )
         self._project_combo.setCurrentIndex( self.project_idx )
         # Look at client/project current stage?
         
     def _projectLockCB( self ):
         lock = not self._project_lock.isChecked()
         self._new_prj.setEnabled( lock )
-        self._client_combo.setEnabled( lock )
+        self._clients_combo.setEnabled( lock )
         self._project_combo.setEnabled( lock )
         
         
@@ -70,9 +70,9 @@ class DayBuild( QtGui.QWidget ):
         anon = QtGui.QLabel( "Client", self )
         tmp_sp_grid.addWidget( anon, 0, 0, 1, 2 )
         
-        self._client_combo = QtGui.QComboBox( self )
-        self._client_combo.setMinimumWidth( boxWidth )
-        tmp_sp_grid.addWidget( self._client_combo, 0, 2, 1, 3 )
+        self._clients_combo = QtGui.QComboBox( self )
+        self._clients_combo.setMinimumWidth( boxWidth )
+        tmp_sp_grid.addWidget( self._clients_combo, 0, 2, 1, 3 )
         
         self._new_prj = QtGui.QPushButton( "New Project", self )
         tmp_sp_grid.addWidget( self._new_prj, 0, 5, 1, 2 )
@@ -93,10 +93,11 @@ class DayBuild( QtGui.QWidget ):
         self._project_path.setReadOnly( True )
         tmp_sp_grid.addWidget( self._project_path, 2, 0, 1, 7 )
         
-        anon = QtGui.QPushButton( "I Chose YOU!", self )
+        anon = QtGui.QPushButton( "I &Chose YOU!", self )
+        anon.setMinimumWidth( 110 )
         tmp_sp_grid.addWidget( anon, 3, 0, 1, 3 )
         
-        anon = QtGui.QPushButton( "Update Henchman", self )
+        anon = QtGui.QPushButton( "&Update Henchman", self )
         tmp_sp_grid.addWidget( anon, 3, 4, 1, 3 )
         
         tmp_sp_grp.setLayout( tmp_sp_grid )
@@ -134,8 +135,8 @@ class DayBuild( QtGui.QWidget ):
         self._date_lock.stateChanged.connect( self._dateLockCB )
         tmp_cd_grid.addWidget( self._date_lock, 2, 0, 1, 2 )
         
-        anon = QtGui.QPushButton( "Generate", self )
-        tmp_cd_grid.addWidget( anon, 2, 3, 1, 1 )
+        self._generate = QtGui.QPushButton( "&Generate Day", self )
+        tmp_cd_grid.addWidget( self._generate, 2, 3, 1, 1 )
         
         tmp_cd_grp.setLayout( tmp_cd_grid )
 
@@ -154,6 +155,7 @@ class DayBuild( QtGui.QWidget ):
         
     def run( self ):
         self.show()
+        self._generate.setFocus()
         self._parent_app.exec_()
         
         
