@@ -45,6 +45,7 @@ class DayBuild( QtGui.QWidget ):
         self._project_combo.setCurrentIndex( self.project_idx )
         # Look at client/project current stage?
         
+        
     def _projectLockCB( self ):
         lock = not self._project_lock.isChecked()
         self._new_prj.setEnabled( lock )
@@ -57,6 +58,23 @@ class DayBuild( QtGui.QWidget ):
         self._date_code.setReadOnly( lock )
     
     
+    def _clientChangeCB( self ):
+        # Hack to dodge Recursion error
+        self._clients_combo.currentIndexChanged.disconnect()
+        
+        self.client_idx = self._clients_combo.currentIndex()
+        self.current_client = self._clients_combo.itemText( self.client_idx )
+        
+        # TODO: update client's last used project from client globals
+        self.project_idx = 0
+        
+        self.project_list = sorted( self.cp_map[ self.current_client ] )
+        self.current_project = self.project_list[ self.project_idx ]
+        self._updateCpUi()
+        # Hack to dodge Recursion error
+        self._clients_combo.currentIndexChanged.connect( self._clientChangeCB )
+        
+        
     def _buildUI( self ):
         self.setWindowTitle( "Make my Day - V2.0.1" )
         boxWidth = 100
@@ -86,7 +104,6 @@ class DayBuild( QtGui.QWidget ):
         
         self._project_lock = QtGui.QCheckBox( "Locked", self )
         self._project_lock.setCheckState( QtCore.Qt.Checked )
-        self._project_lock.stateChanged.connect( self._projectLockCB )
         tmp_sp_grid.addWidget( self._project_lock, 1, 6 )
         
         self._project_path = QtGui.QLineEdit( "Path", self )
@@ -132,7 +149,6 @@ class DayBuild( QtGui.QWidget ):
         
         self._date_lock = QtGui.QCheckBox( "Unlock Datecode", self )
         self._date_lock.setCheckState( QtCore.Qt.Unchecked )
-        self._date_lock.stateChanged.connect( self._dateLockCB )
         tmp_cd_grid.addWidget( self._date_lock, 2, 0, 1, 2 )
         
         self._generate = QtGui.QPushButton( "&Generate Day", self )
@@ -151,6 +167,11 @@ class DayBuild( QtGui.QWidget ):
         self._updateCpUi()
         self._projectLockCB()
         self._dateLockCB()
+        
+        # attach CBs
+        self._project_lock.stateChanged.connect( self._projectLockCB )
+        self._date_lock.stateChanged.connect( self._dateLockCB )
+        self._clients_combo.currentIndexChanged.connect( self._clientChangeCB )
 
         
     def run( self ):
