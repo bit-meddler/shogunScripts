@@ -6,10 +6,16 @@ import sys
 import os
 import datetime
 import ConfigParser
-
+from glob import glob
 
 def scanDB( path ):
-    pass
+    if not os.path.isdir( path ):
+        print( "PATH needs to be to an existing directory" )
+        exit()
+    # List dirs with an enf in them
+    dirs = glob( os.path.join( path, "*", "*.enf" ) )
+    return map( lambda x: os.path.basename( os.path.dirname( x ) ), dirs )
+    
 
 def scanProjects( path ):
     pass
@@ -72,7 +78,7 @@ if __name__ == "__main__":
             print( "scanDB requires the path paramiter" )
             exit()
         else:
-            scanDB( args.path )
+            print( scanDB( args.path ) )
     elif( args.scanProjects ):
         if( args.path is None ):
             print( "scanProjects requires the path paramiter" )
