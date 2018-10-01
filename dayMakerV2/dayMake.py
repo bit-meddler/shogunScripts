@@ -234,6 +234,7 @@ class DayBuild( QtGui.QWidget ):
         
         self._date_code = QtGui.QLineEdit( self.datecode, self )
         self._date_code.setMaximumWidth( 75 )
+        self._date_code.setReadOnly( True )
         tmp_cd_grid.addWidget( self._date_code, 1, 0, 1, 1 )
         
         anon = QtGui.QLabel( "Stage ID:", self )
