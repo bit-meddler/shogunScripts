@@ -1,6 +1,7 @@
 from PySide import QtGui, QtCore
-import sys, os
-
+import sys
+import os
+import datetime
 
 class DayBuild( QtGui.QWidget ):
 
@@ -8,12 +9,12 @@ class DayBuild( QtGui.QWidget ):
         super( DayBuild, self ).__init__()
         self._parent_app = parent_app
         self._loadLastSettings()
+        self._initDate()
         self._buildUI()
         
         
     def _updateCpMap( self ):
-        # Scan Folder structure?
-        print( "Scan session" )
+        # Bodge for UI testing
         self.cp_map = {
             "Framestore" : ( "Gravity", "Jungle Book" ),
             "Weta" : ( "Apes", "Tintin", "LotR" ),
@@ -21,27 +22,48 @@ class DayBuild( QtGui.QWidget ):
         }
     
     
-    def _getProjectSettings( self ):
-        print( "Get Project Settings" )
-        self._sessions        = ( "AM", "PM", "#CAL#", "#ROM#" )
-        self.current_location = "B"
-        self.current_stage    = 2
+    def _initDate( self ):
+        now = datetime.datetime.now()
+        self.datecode = now.strftime( self.datecode_format )
         
+        
+    def _updateClientList( self ):
+        print( "enfTool -scanDB -path '{}'".format( self.vicon_root ) )
+        self.client_list  = sorted( self.cp_map.keys() )
+        
+        
+    def _updateProjectList( self ):
+        cli_path = self.vicon_root + self.current_client + os.path.sep
+        print( "enfTool -scanProjects -path '{}'".format( cli_path ) )
+        self.project_list = sorted( self.cp_map[ self.current_client ] )
+        
+    
+    def _getProjectSettings( self ):
+        # TODO: Load from ini file
+        prj_path = self.vicon_root + self.prj_path + os.sep
+        print( "enfTool -getProjectSettings -prj '{}'".format( prj_path ) )
+        self._sessions        = ( "CAL", "ROM", "AM", "PM" )
+        self.current_location = "A"
+        self.current_stage    = 1
+        self.day_format       = "{daycode}_{location}{stage}_{dayname}"
+        self.datecode_format  = "%y%m%d"
+    
     
     def _loadLastSettings( self ):
         # TODO: Load from ini file
-        self.vicon_root       = "C:\\ViconDB\\"
-        self.day_format       = "{daycode}_{location}{stage}_{dayname}"
-        self.current_client   = "Framestore"
-        self.current_project  = "Gravity"
-        #self._getProjectSettings()
-        # update map
+        print( "Get App Settings" )
+        self.vicon_root      = "C:\\ViconDB\\"
+        self.current_client  = "Framestore"
+        self.current_project = "Gravity"
+        self.day_format      = "{daycode}_{location}{stage}_{dayname}"
+        self.datecode_format = "%y%m%d"
+        # update list data
         self._updateCpMap()
+        self._updateClientList()
+        self._updateProjectList()
         # set UI
-        self.client_list  = sorted( self.cp_map.keys() )
-        self.client_idx   = self.client_list.index( self.current_client )
-        self.project_list = sorted( self.cp_map[ self.current_client ] )
-        self.project_idx  = self.project_list.index( self.current_project )
+        self.client_idx  = self.client_list.index(  self.current_client  )
+        self.project_idx = self.project_list.index( self.current_project )
 
         
     def _updatePath( self ):
@@ -61,9 +83,9 @@ class DayBuild( QtGui.QWidget ):
         # update combos
         self._clients_combo.clear() 
         self._project_combo.clear()
-        self._clients_combo.addItems( self.client_list )
+        self._clients_combo.addItems( self.client_list  )
         self._project_combo.addItems( self.project_list )
-        self._clients_combo.setCurrentIndex( self.client_idx )
+        self._clients_combo.setCurrentIndex( self.client_idx  )
         self._project_combo.setCurrentIndex( self.project_idx )
         # Look at client/project current stage?
         
@@ -77,14 +99,14 @@ class DayBuild( QtGui.QWidget ):
             self._updatePath()
         
         
-    def _dateLockCB( self ):
-        lock = not self._date_lock.isChecked()
-        self._date_code.setReadOnly( lock )
-        
-        
     def _chooseCP( self, innerCall=False ):
         # get selected project
         self._project_lock.setCheckState( QtCore.Qt.Checked )
+        
+        
+    def _dateLockCB( self ):
+        lock = not self._date_lock.isChecked()
+        self._date_code.setReadOnly( lock )
     
     
     def _clientChangeCB( self ):
@@ -97,7 +119,7 @@ class DayBuild( QtGui.QWidget ):
         # TODO: update client's last used project from client globals
         self.project_idx = 0
         
-        self.project_list = sorted( self.cp_map[ self.current_client ] )
+        self._updateProjectList()
         self.current_project = self.project_list[ self.project_idx ]
         self._updateCpUi()
         # Hack to dodge Recursion error
@@ -124,9 +146,10 @@ class DayBuild( QtGui.QWidget ):
             "dayname" : self._session_name.text()
         }
         day_code = self.day_format.format( **meta_data )
-        print( "CreateDay -Prj '{}' -Day '{}'".format( prj_path, day_code ) )
+        print( "enfTool -createDay -prj '{}' -day '{}'".format( prj_path, day_code ) )
         for session in self._sessions:
-            print( "CreateSession -Prj '{}' -Day '{}' -Session '{}'".format( prj_path, day_code, session ) )
+            print( "enfTool -createSession -prj '{}' -say '{}' -ses '{}'".format( prj_path, day_code, session ) )
+        
         
     def _buildUI( self ):
         self.setWindowTitle( "Make my Day - V2.0.1" )
@@ -180,7 +203,7 @@ class DayBuild( QtGui.QWidget ):
         anon = QtGui.QLabel( "Datecode", self )
         tmp_cd_grid.addWidget( anon, 0, 0, 1, 1 )
         
-        self._date_code = QtGui.QLineEdit( "123456", self )
+        self._date_code = QtGui.QLineEdit( self.datecode, self )
         self._date_code.setMaximumWidth( 75 )
         tmp_cd_grid.addWidget( self._date_code, 1, 0, 1, 1 )
         
@@ -236,12 +259,9 @@ class DayBuild( QtGui.QWidget ):
         
         # attach CBs
         self._choose.clicked.connect( self._chooseCP )
-        #self.connect( self._choose, SIGNAL( 'clicked()' ), self._chooseCP )
         self._generate.clicked.connect( self.generate )
-        
         self._project_lock.stateChanged.connect( self._projectLockCB )
         self._date_lock.stateChanged.connect( self._dateLockCB )
-        
         self._clients_combo.currentIndexChanged.connect( self._clientChangeCB )
         self._location.currentIndexChanged.connect( self._stageCB )
         self._stage.valueChanged.connect( self._stageCB )
@@ -254,8 +274,6 @@ class DayBuild( QtGui.QWidget ):
         
         
 if __name__ == "__main__":
-    print( sys.argv )
     _app = QtGui.QApplication( sys.argv )
-    
     ui_test = DayBuild( _app )
     ui_test.run()
