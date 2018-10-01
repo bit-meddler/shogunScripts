@@ -2,13 +2,25 @@ from PySide import QtGui, QtCore
 import sys
 import os
 import datetime
+import ConfigParser
+
 
 class DayBuild( QtGui.QWidget ):
 
+    _SAVED_ATTERS = ( 'vicon_root', 'current_client', 'current_project',
+                      'day_format', 'datecode_format' )
+    _CFG_SECTION  = "SYSTEM"
+    _CFG_FILENAME = "dayBuild.cfg"
+    
+    
     def __init__( self, parent_app ):
         super( DayBuild, self ).__init__()
+        self._local_data = os.getenv( "LOCALAPPDATA" )
+        self._config = ConfigParser.RawConfigParser()
+        self._config.add_section( self._CFG_SECTION )
+        self._cfg_fqp = os.path.join( self._local_data, self._CFG_FILENAME )
         self._parent_app = parent_app
-        self._loadLastSettings()
+        self._loadAppCfg()
         self._initDate()
         self._buildUI()
         
@@ -49,14 +61,20 @@ class DayBuild( QtGui.QWidget ):
         self.datecode_format  = "%y%m%d"
     
     
-    def _loadLastSettings( self ):
-        # TODO: Load from ini file
-        print( "Get App Settings" )
-        self.vicon_root      = "C:\\ViconDB\\"
-        self.current_client  = "Framestore"
-        self.current_project = "Gravity"
-        self.day_format      = "{daycode}_{location}{stage}_{dayname}"
-        self.datecode_format = "%y%m%d"
+    def _loadAppCfg( self ):
+        if( os.path.isfile( self._cfg_fqp ) ):
+            self._config.read( self._cfg_fqp )            
+            for attr in self._SAVED_ATTERS:
+                val = self._config.get( self._CFG_SECTION, attr )
+                setattr( self, attr, val )
+        else:
+            # Defaults
+            self.vicon_root      = "C:\\ViconDB\\"
+            self.current_client  = "Framestore"
+            self.current_project = "Gravity"
+            self.day_format      = "{daycode}_{location}{stage}_{dayname}"
+            self.datecode_format = "%y%m%d"
+            
         # update list data
         self._updateCpMap()
         self._updateClientList()
@@ -66,6 +84,14 @@ class DayBuild( QtGui.QWidget ):
         self.project_idx = self.project_list.index( self.current_project )
 
         
+    def _saveAppCfg( self ):
+        for attr in self._SAVED_ATTERS:
+            self._config.set( self._CFG_SECTION, attr, getattr( self, attr ) )
+        fh = open( self._cfg_fqp, "w" )
+        self._config.write( fh )
+        fh.close()
+            
+        
     def _updatePath( self ):
         self.project_idx = self._project_combo.currentIndex()
         self.current_project = self._project_combo.itemText( self.project_idx )
@@ -74,7 +100,8 @@ class DayBuild( QtGui.QWidget ):
         self._project_path.setText( self.prj_path )
         # Get Project Settings
         self._getProjectSettings()
-    
+        self._saveAppCfg()
+        
     
     def _updateCpUi( self ):
         # Sanity test
@@ -139,6 +166,8 @@ class DayBuild( QtGui.QWidget ):
         
     def generate( self ):
         prj_path = self.vicon_root + self.prj_path + os.sep
+        print( "enfTool -scanDays -prj '{}'".format( prj_path ) )
+        # TODO: determine highest suffix of 'session_name' in list of days
         meta_data = {
             "daycode" : self._date_code.text(),
             "location": self.current_location,
@@ -148,7 +177,7 @@ class DayBuild( QtGui.QWidget ):
         day_code = self.day_format.format( **meta_data )
         print( "enfTool -createDay -prj '{}' -day '{}'".format( prj_path, day_code ) )
         for session in self._sessions:
-            print( "enfTool -createSession -prj '{}' -say '{}' -ses '{}'".format( prj_path, day_code, session ) )
+            print( "enfTool -createSession -prj '{}' -day '{}' -ses '{}'".format( prj_path, day_code, session ) )
         
         
     def _buildUI( self ):
