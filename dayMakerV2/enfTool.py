@@ -53,7 +53,15 @@ def biggestSuffix( path, descriptor ):
     return high if high>0 else 0
 
 def getProjectSettings( path ):
-    pass
+    error = "PATH needs to be to an existing directory, Leading to a Vicon 'Project'."
+    search = os.path.join( path, "000000*", "" )
+    res = _absENFscan( path, error, search )
+    if( len( res ) != 1 ):
+        print( "Error! no globals found")
+        global_folder = "000000_globals"
+    else:
+        global_folder = res[0]
+    return os.path.join( path, global_folder, "settings.ini" )
 
 def createProject( path, prj ):
     pass
@@ -134,7 +142,7 @@ if __name__ == "__main__":
             print( "getProjectSettings requires the path paramiter" )
             exit()
         else:
-            getProjectSettings( args.path )
+            print getProjectSettings( args.path )
     elif( args.matchDays ):
         if( args.path is None ):
             print( "matchDays requires the path paramiter" )

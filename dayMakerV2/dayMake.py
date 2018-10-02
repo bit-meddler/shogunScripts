@@ -4,6 +4,8 @@ import os
 import datetime
 import ConfigParser
 
+import enfTool
+
 
 class DayBuild( QtGui.QWidget ):
 
@@ -11,6 +13,9 @@ class DayBuild( QtGui.QWidget ):
                       'day_format', 'datecode_format' )
     _CFG_SECTION  = "SYSTEM"
     _CFG_FILENAME = "dayBuild.cfg"
+    _PRJ_SECTION  = "DAYSETTINGS"
+    _PRJ_ATTERS   = ( "current_location", "current_stage", "day_format", "datecode_format" )
+    _PRJ_CASTS    = ( str, int, str, str )
     
     
     def __init__( self, parent_app ):
@@ -40,25 +45,34 @@ class DayBuild( QtGui.QWidget ):
         
         
     def _updateClientList( self ):
-        print( "enfTool -scanDB -path '{}'".format( self.vicon_root ) )
-        self.client_list  = sorted( self.cp_map.keys() )
+        self.client_list  = enfTool.scanDB( self.vicon_root )
         
         
     def _updateProjectList( self ):
-        cli_path = self.vicon_root + self.current_client + os.path.sep
-        print( "enfTool -scanProjects -path '{}'".format( cli_path ) )
-        self.project_list = sorted( self.cp_map[ self.current_client ] )
+        self.project_list = enfTool.scanProjects(
+            self.vicon_root + self.current_client + os.path.sep
+        )
         
     
     def _getProjectSettings( self ):
         # TODO: Load from ini file
         prj_path = self.vicon_root + self.prj_path + os.sep
-        print( "enfTool -getProjectSettings -prj '{}'".format( prj_path ) )
-        self._sessions        = ( "CAL", "ROM", "AM", "PM" )
-        self.current_location = "A"
-        self.current_stage    = 1
-        self.day_format       = "{daycode}_{location}{stage}_{dayname}"
-        self.datecode_format  = "%y%m%d"
+        settings_path = enfTool.getProjectSettings( prj_path )
+        if( os.path.isfile( settings_path ) ):
+            prjconf = ConfigParser.RawConfigParser()
+            prjconf.read( settings_path )
+            for attr, cast in zip( self._PRJ_ATTERS, self._PRJ_CASTS ):
+                val = prjconf.get( self._PRJ_SECTION, attr )
+                setattr( self, attr, cast( val ) )
+            ses = prjconf.get( self._PRJ_SECTION, "sessions" )
+            self._sessions = tuple( ses.split( "," ) )
+        else:
+            # defaults
+            self._sessions        = ( "CAL", "ROM", "AM", "PM" )
+            self.current_location = "A"
+            self.current_stage    = 1
+            self.day_format       = "{daycode}_{location}{stage}_{dayname}"
+            self.datecode_format  = "%y%m%d"
     
     
     def _loadAppCfg( self ):
@@ -69,7 +83,7 @@ class DayBuild( QtGui.QWidget ):
                 setattr( self, attr, val )
         else:
             # Defaults
-            self.vicon_root      = "C:\\ViconDB\\"
+            self.vicon_root      = "C:\\ViconData\\"
             self.current_client  = "Framestore"
             self.current_project = "Gravity"
             self.day_format      = "{daycode}_{location}{stage}_{dayname}"
