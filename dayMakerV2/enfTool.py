@@ -6,23 +6,52 @@ import sys
 import os
 import datetime
 import ConfigParser
+import re
 from glob import glob
 
-def scanDB( path ):
+
+_MATCH_LAST_DIGITS = re.compile( '.*?([0-9]+)$', re.I )
+
+def _absENFscan( path, error, search=None ):
     if not os.path.isdir( path ):
-        print( "PATH needs to be to an existing directory" )
+        print( error )
         exit()
     # List dirs with an enf in them
-    dirs = glob( os.path.join( path, "*", "*.enf" ) )
+    if( search is None ):
+        search = os.path.join( path, "*", "*.enf" )
+    dirs = glob( search )
     return map( lambda x: os.path.basename( os.path.dirname( x ) ), dirs )
     
+def scanDB( path ):
+    error = "PATH needs to be to an existing directory, leading to the root of the Vicon datastructure."
+    return _absENFscan( path, error )
 
 def scanProjects( path ):
-    pass
+    error = "PATH needs to be to an existing directory, leading to a Vicon 'Database'."
+    search = os.path.join( path, "*", "*Project*.enf" )
+    return _absENFscan( path, error, search )
     
 def scanDays( path ):
-    pass
+    error = "PATH needs to be to an existing directory, Leading to a Vicon 'Project'."
+    search = os.path.join( path, "*", "*Capture Day*.enf" )
+    return _absENFscan( path, error, search )
     
+def matchDays( path, descriptor ):
+    error = "PATH needs to be to an existing directory, Leading to a Vicon 'Project'.\n" + \
+            "TEXT is a descriptor to match in existing days"
+    search = os.path.join( path, "*", "*" + descriptor + "*Capture Day*.enf" )
+    return _absENFscan( path, error, search )
+    
+def biggestSuffix( path, descriptor ):
+    candidates = matchDays( path, descriptor )
+    serials = [ -1 for _ in candidates ]
+    for i in range( len( serials ) ):
+        res = _MATCH_LAST_DIGITS.search( candidates[i] )
+        if res:
+            serials[i] = int( res.group(1) )
+    high = max( serials )
+    return high if high>0 else 0
+
 def getProjectSettings( path ):
     pass
 
@@ -52,6 +81,14 @@ if __name__ == "__main__":
                           action="store_true",
                           help="PATH to Vicon 'Project' to scan for 'Days'"
     )
+    actions.add_argument( "--matchDays",
+                          action="store_true",
+                          help="PATH to Vicon 'Project' to match TEXT in"
+    )
+    actions.add_argument( "--biggestSuffix",
+                          action="store_true",
+                          help="PATH to Vicon 'Project' to match TEXT in and find biggest suffix"
+    )
     actions.add_argument( "--getProjectSettings",
                           action="store_true",
                           help="PATH to Vicon 'Project' to load settings for"
@@ -72,6 +109,7 @@ if __name__ == "__main__":
     parser.add_argument( "-j", "--project", help="Project to be acted on" )
     parser.add_argument( "-d", "--day", help="DAY to be acted on" )
     parser.add_argument( "-s", "--session", help="SESSION to be acted on" )
+    parser.add_argument( "-t", "--text", help="TEXT to match existing scaning Project" )
     args = parser.parse_args()
     if( args.scanDB ):
         if( args.path is None ):
@@ -84,19 +122,37 @@ if __name__ == "__main__":
             print( "scanProjects requires the path paramiter" )
             exit()
         else:
-            scanProjects( args.path )
+            print scanProjects( args.path )
     elif( args.scanDays ):
         if( args.path is None ):
             print( "scanDays requires the path paramiter" )
             exit()
         else:
-            scanDays( args.path )
+            print scanDays( args.path )
     elif( args.getProjectSettings ):
         if( args.path is None ):
             print( "getProjectSettings requires the path paramiter" )
             exit()
         else:
             getProjectSettings( args.path )
+    elif( args.matchDays ):
+        if( args.path is None ):
+            print( "matchDays requires the path paramiter" )
+            exit()
+        if( args.text is None ):
+            print( "matchDays requires the text paramiter" )
+            exit()
+        else:
+            print matchDays( args.path, args.text )
+    elif( args.biggestSuffix ):
+        if( args.path is None ):
+            print( "biggestSuffix requires the path paramiter" )
+            exit()
+        if( args.text is None ):
+            print( "biggestSuffix requires the text paramiter" )
+            exit()
+        else:
+            print biggestSuffix( args.path, args.text )
     elif( args.createProject ):
         if( args.path is None ):
             print( "createProject requires the path paramiter" )
