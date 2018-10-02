@@ -3,6 +3,7 @@ import sys
 import os
 import datetime
 import ConfigParser
+import platform
 
 import enfTool
 
@@ -14,8 +15,9 @@ class DayBuild( QtGui.QWidget ):
     _CFG_SECTION  = "SYSTEM"
     _CFG_FILENAME = "dayBuild.cfg"
     _PRJ_SECTION  = "DAYSETTINGS"
-    _PRJ_ATTERS   = ( "current_location", "current_stage", "day_format", "datecode_format" )
-    _PRJ_CASTS    = ( str, int, str, str )
+    _PRJ_ATTERS   = ( "current_location", "current_stage", "day_format",
+                      "datecode_format", "last_desc" )
+    _PRJ_CASTS    = ( str, int, str, str, str )
     
     
     def __init__( self, parent_app ):
@@ -28,15 +30,6 @@ class DayBuild( QtGui.QWidget ):
         self._loadAppCfg()
         self._initDate()
         self._buildUI()
-        
-        
-    def _updateCpMap( self ):
-        # Bodge for UI testing
-        self.cp_map = {
-            "Framestore" : ( "Gravity", "Jungle Book" ),
-            "Weta" : ( "Apes", "Tintin", "LotR" ),
-            "dNeg" : ( "John Carter", "Avengers" ),
-        }
     
     
     def _initDate( self ):
@@ -49,13 +42,12 @@ class DayBuild( QtGui.QWidget ):
         
         
     def _updateProjectList( self ):
-        self.project_list = enfTool.scanProjects(
-            self.vicon_root + self.current_client + os.path.sep
-        )
+        self.project_list = enfTool.scanProjects(self.vicon_root+self.current_client+os.path.sep)
         
     
     def _getProjectSettings( self ):
-        # TODO: Load from ini file
+        # TODO: find a placce to save out Project settings
+        #hostname = platform.uname()[1] # host specific settings?
         prj_path = self.vicon_root + self.prj_path + os.sep
         settings_path = enfTool.getProjectSettings( prj_path )
         if( os.path.isfile( settings_path ) ):
@@ -64,15 +56,17 @@ class DayBuild( QtGui.QWidget ):
             for attr, cast in zip( self._PRJ_ATTERS, self._PRJ_CASTS ):
                 val = prjconf.get( self._PRJ_SECTION, attr )
                 setattr( self, attr, cast( val ) )
+            # sessions need special attention
             ses = prjconf.get( self._PRJ_SECTION, "sessions" )
             self._sessions = tuple( ses.split( "," ) )
         else:
-            # defaults
+            # Defaults
             self._sessions        = ( "CAL", "ROM", "AM", "PM" )
             self.current_location = "A"
             self.current_stage    = 1
-            self.day_format       = "{daycode}_{location}{stage}_{dayname}"
+            self.day_format       = "{daycode}_{location}{stage}_{dayname}{suffix:0>2}"
             self.datecode_format  = "%y%m%d"
+            self.last_desc        = "CaptureDay"
     
     
     def _loadAppCfg( self ):
@@ -86,16 +80,15 @@ class DayBuild( QtGui.QWidget ):
             self.vicon_root      = "C:\\ViconData\\"
             self.current_client  = "Framestore"
             self.current_project = "Gravity"
-            self.day_format      = "{daycode}_{location}{stage}_{dayname}"
+            self.day_format      = "{daycode}_{location}{stage}_{dayname}_{suffix:0>2}"
             self.datecode_format = "%y%m%d"
             
         # update list data
-        self._updateCpMap()
         self._updateClientList()
         self._updateProjectList()
         # set UI
-        self.client_idx  = self.client_list.index(  self.current_client  )
-        self.project_idx = self.project_list.index( self.current_project )
+        self.client_idx  = self.client_list.index(  self.current_client   )
+        self.project_idx = self.project_list.index( self.cukrrent_project )
 
         
     def _saveAppCfg( self ):
@@ -114,6 +107,7 @@ class DayBuild( QtGui.QWidget ):
         self._project_path.setText( self.prj_path )
         # Get Project Settings
         self._getProjectSettings()
+        self._session_name.setText( self.last_desc )
         self._saveAppCfg()
         
     
@@ -176,17 +170,20 @@ class DayBuild( QtGui.QWidget ):
     def _stageCB( self ):
         self.current_location = self._location.itemText( self._location.currentIndex() )
         self.current_stage = self._stage.value()
+        # save location & stage to project ini
         
         
     def generate( self ):
         prj_path = self.vicon_root + self.prj_path + os.sep
-        print( "enfTool -scanDays -prj '{}'".format( prj_path ) )
+        dayname = self._session_name.text()
+        suffix = enfTool.biggestSuffix( prj_path, dayname ) + 1
         # TODO: determine highest suffix of 'session_name' in list of days
         meta_data = {
             "daycode" : self._date_code.text(),
             "location": self.current_location,
             "stage"   : self.current_stage,
-            "dayname" : self._session_name.text()
+            "dayname" : dayname,
+            "suffix"  : suffix
         }
         day_code = self.day_format.format( **meta_data )
         print( "enfTool -createDay -prj '{}' -day '{}'".format( prj_path, day_code ) )
