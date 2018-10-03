@@ -10,16 +10,46 @@ import enfTool
 
 class DayBuild( QtGui.QWidget ):
 
-    _SAVED_ATTERS = ( 'vicon_root', 'current_client', 'current_project',
-                      'day_format', 'datecode_format' )
-    _CFG_SECTION  = "SYSTEM"
-    _CFG_FILENAME = "dayBuild.cfg"
-    _PRJ_SECTION  = "DAYSETTINGS"
+    _SAVED_ATTERS = ( "vicon_root", "current_client", "current_project",
+                      "day_format", "datecode_format", "day_validation" )
+    _CFG_SECTION  =   "SYSTEM"
+    _CFG_FILENAME =   "dayBuild.cfg"
+    _PRJ_SECTION  =   "DAYSETTINGS"
     _PRJ_ATTERS   = ( "current_location", "current_stage", "day_format",
                       "datecode_format", "last_desc" )
     _PRJ_CASTS    = ( str, int, str, str, str )
     
+    _DEFAULTS     = {
+        "vicon_root"      : "C:\\ViconDB\\",
+        "current_client"  : "Framestore",
+        "current_project" : "Gravity",
+        "day_format"      : "{daycode}_{location}{stage}_{dayname}_{suffix:0>2}",
+        "datecode_format" : "%y%m%d",
+        "day_validation"  : "[A-Za-z0-9_]+",
+        "_sessions"       : ( "CAL", "ROM", "AM", "PM" ),
+        "current_location": "A",
+        "current_stage"   : 1,
+        "last_desc"       : "CaptureDay",
+    }
+    _CASTS        = {
+        "vicon_root"      : _passThru,
+        "current_client"  : _passThru,
+        "current_project" : _passThru,
+        "day_format"      : _passThru,
+        "datecode_format" : _passThru,
+        "day_validation"  : _passThru,
+        "_sessions"       : lambda x: tuple( x.split( "," ) ),
+        "current_location": _passThru,
+        "current_stage"   : int,
+        "last_desc"       : _passThru,
+    }
     
+    
+    @staticmethod
+    def _passThru( x ):
+        return X
+        
+        
     def __init__( self, parent_app, clean_start=False ):
         super( DayBuild, self ).__init__()
         self._local_data = os.getenv( "LOCALAPPDATA" )
@@ -45,45 +75,62 @@ class DayBuild( QtGui.QWidget ):
     def _updateProjectList( self ):
         self.project_list = enfTool.scanProjects(self.vicon_root+self.current_client+os.path.sep)
         
-    
+        
+    def _genericConfLoader( self, parser, path, keys, section ):
+        if( os.path.isfile( path ) ):
+            parser.read( path )            
+            for attr in keys:
+                try:
+                    val = self._CASTS[ attr ]( parser.get( section, attr ) )
+                except ConfigParser.NoOptionError:
+                    val = self._DEFAULTS[ attr ]
+                setattr( self, attr, val )
+        else:
+            # Load Defaults
+            for attr in keys:
+                setattr( self, attr, self._DEFAULTS[ attr ] )
+                
+                
     def _getProjectSettings( self ):
-        # TODO: find a placce to save out Project settings
-        #hostname = platform.uname()[1] # host specific settings?
+        # TODO: find a placce to save out Project settings per host
+        # TODO: Generic config parser called by both
+        #hostname = platform.uname()[1]
         prj_path = self.vicon_root + self.prj_path + os.sep
         settings_path = enfTool.getProjectSettings( prj_path )
+        # prjconf = ConfigParser.RawConfigParser()
+        #__genericConfLoader( prjconf, settings_path, self._PRJ_ATTERS, self._PRJ_SECTION )
         if( os.path.isfile( settings_path ) ):
             prjconf = ConfigParser.RawConfigParser()
             prjconf.read( settings_path )
             for attr, cast in zip( self._PRJ_ATTERS, self._PRJ_CASTS ):
-                val = prjconf.get( self._PRJ_SECTION, attr )
-                setattr( self, attr, cast( val ) )
+                try:
+                    val = cast( prjconf.get( self._PRJ_SECTION, attr ) )
+                except ConfigParser.NoOptionError:
+                    val = self._DEFAULTS[ attr ]
+                setattr( self, attr, val )
             # sessions need special attention
             ses = prjconf.get( self._PRJ_SECTION, "sessions" )
             self._sessions = tuple( ses.split( "," ) )
         else:
-            # Defaults
-            self._sessions        = ( "CAL", "ROM", "AM", "PM" )
-            self.current_location = "A"
-            self.current_stage    = 1
-            self.day_format       = "{daycode}_{location}{stage}_{dayname}{suffix:0>2}"
-            self.datecode_format  = "%y%m%d"
-            self.last_desc        = "CaptureDay"
+            # Load Defaults
+            for attr in self._PRJ_SECTION:
+                setattr( self, attr, self._DEFAULTS[ attr ] )
     
     
     def _loadAppCfg( self ):
+        # _genericConfLoader( self._config.read, self._cfg_fqp, self._CFG_SECTION, self._SAVED_ATTERS )
         if( os.path.isfile( self._cfg_fqp ) ):
             self._config.read( self._cfg_fqp )            
             for attr in self._SAVED_ATTERS:
-                val = self._config.get( self._CFG_SECTION, attr )
+                try:
+                    val = self._config.get( self._CFG_SECTION, attr )
+                except ConfigParser.NoOptionError:
+                    val = self._DEFAULTS[ attr ]
                 setattr( self, attr, val )
         else:
-            # Defaults
-            self.vicon_root      = "C:\\ViconDB\\"
-            self.current_client  = "Framestore"
-            self.current_project = "Gravity"
-            self.day_format      = "{daycode}_{location}{stage}_{dayname}_{suffix:0>2}"
-            self.datecode_format = "%y%m%d"
-            self.day_validation  = "[A-Za-z0-9_]+"
+            # Load Defaults
+            for attr in self._SAVED_ATTERS:
+                setattr( self, attr, self._DEFAULTS[ attr ] )
             
         # update list data
         self._updateClientList()
@@ -97,6 +144,7 @@ class DayBuild( QtGui.QWidget ):
             self.project_idx = self.project_list.index( self.current_project )
         except ValueError:
             self.project_idx = 0
+        
         
     def _saveAppCfg( self ):
         for attr in self._SAVED_ATTERS:

@@ -44,13 +44,14 @@ def matchDays( path, descriptor ):
     
 def biggestSuffix( path, descriptor ):
     candidates = matchDays( path, descriptor )
+    if( len( candidates ) < 1 ):
+        return 0
     serials = [ -1 for _ in candidates ]
     for i in range( len( serials ) ):
         res = _MATCH_LAST_DIGITS.search( candidates[i] )
         if res:
             serials[i] = int( res.group(1) )
-    high = max( serials )
-    return high if high>0 else 0
+    return high 
 
 def getProjectSettings( path ):
     error = "PATH needs to be to an existing directory, Leading to a Vicon 'Project'."
