@@ -51,7 +51,7 @@ def biggestSuffix( path, descriptor ):
         res = _MATCH_LAST_DIGITS.search( candidates[i] )
         if res:
             serials[i] = int( res.group(1) )
-    return high 
+    return max( serials ) 
 
 def getProjectSettings( path ):
     error = "PATH needs to be to an existing directory, Leading to a Vicon 'Project'."

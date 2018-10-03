@@ -8,17 +8,19 @@ import platform
 import enfTool
 
 
+def _passThru( x ):
+    return x
+
+    
 class DayBuild( QtGui.QWidget ):
 
+    _CFG_FILENAME =   "dayBuild.cfg"
+    _CFG_SECTION  =   "SYSTEM"
+    _PRJ_SECTION  =   "DAYSETTINGS"
     _SAVED_ATTERS = ( "vicon_root", "current_client", "current_project",
                       "day_format", "datecode_format", "day_validation" )
-    _CFG_SECTION  =   "SYSTEM"
-    _CFG_FILENAME =   "dayBuild.cfg"
-    _PRJ_SECTION  =   "DAYSETTINGS"
     _PRJ_ATTERS   = ( "current_location", "current_stage", "day_format",
-                      "datecode_format", "last_desc" )
-    _PRJ_CASTS    = ( str, int, str, str, str )
-    
+                      "datecode_format", "last_desc", "_sessions" )
     _DEFAULTS     = {
         "vicon_root"      : "C:\\ViconDB\\",
         "current_client"  : "Framestore",
@@ -31,7 +33,7 @@ class DayBuild( QtGui.QWidget ):
         "current_stage"   : 1,
         "last_desc"       : "CaptureDay",
     }
-    _CASTS        = {
+    _READ_CASTS   = {
         "vicon_root"      : _passThru,
         "current_client"  : _passThru,
         "current_project" : _passThru,
@@ -43,16 +45,23 @@ class DayBuild( QtGui.QWidget ):
         "current_stage"   : int,
         "last_desc"       : _passThru,
     }
+    _WRITE_CASTS  = {
+        "vicon_root"      : _passThru,
+        "current_client"  : _passThru,
+        "current_project" : _passThru,
+        "day_format"      : _passThru,
+        "datecode_format" : _passThru,
+        "day_validation"  : _passThru,
+        "_sessions"       : lambda x: ",".join( x ),
+        "current_location": _passThru,
+        "current_stage"   : str,
+        "last_desc"       : _passThru,
+    }
     
-    
-    @staticmethod
-    def _passThru( x ):
-        return X
-        
-        
+
     def __init__( self, parent_app, clean_start=False ):
         super( DayBuild, self ).__init__()
-        self._local_data = os.getenv( "LOCALAPPDATA" )
+        self._local_data = os.getenv( "LOCALAPPDATA" )# Multiplatform?
         self._config = ConfigParser.RawConfigParser()
         self._config.add_section( self._CFG_SECTION )
         self._cfg_fqp = os.path.join( self._local_data, self._CFG_FILENAME )
@@ -81,7 +90,7 @@ class DayBuild( QtGui.QWidget ):
             parser.read( path )            
             for attr in keys:
                 try:
-                    val = self._CASTS[ attr ]( parser.get( section, attr ) )
+                    val = self._READ_CASTS[ attr ]( parser.get( section, attr ) )
                 except ConfigParser.NoOptionError:
                     val = self._DEFAULTS[ attr ]
                 setattr( self, attr, val )
@@ -91,47 +100,35 @@ class DayBuild( QtGui.QWidget ):
                 setattr( self, attr, self._DEFAULTS[ attr ] )
                 
                 
-    def _getProjectSettings( self ):
+    def _genericConfSaver( self, parser, path, keys, section ):
+        # safty for new
+        if( not parser.has_section( section ) ):
+            parser.add_section( section )
+        for attr in keys:
+            parser.set( section, attr, self._WRITE_CASTS[attr]( getattr( self, attr ) ) )
+        if( not os.path.isfile( path ) ):
+            os.mkdir( os.path.dirname( path ) )
+        fh = open( path, "w" )
+        parser.write( fh )
+        fh.close()
+        
+        
+    def _loadProjectSettings( self ):
         # TODO: find a placce to save out Project settings per host
-        # TODO: Generic config parser called by both
         #hostname = platform.uname()[1]
         prj_path = self.vicon_root + self.prj_path + os.sep
-        settings_path = enfTool.getProjectSettings( prj_path )
-        # prjconf = ConfigParser.RawConfigParser()
-        #__genericConfLoader( prjconf, settings_path, self._PRJ_ATTERS, self._PRJ_SECTION )
-        if( os.path.isfile( settings_path ) ):
-            prjconf = ConfigParser.RawConfigParser()
-            prjconf.read( settings_path )
-            for attr, cast in zip( self._PRJ_ATTERS, self._PRJ_CASTS ):
-                try:
-                    val = cast( prjconf.get( self._PRJ_SECTION, attr ) )
-                except ConfigParser.NoOptionError:
-                    val = self._DEFAULTS[ attr ]
-                setattr( self, attr, val )
-            # sessions need special attention
-            ses = prjconf.get( self._PRJ_SECTION, "sessions" )
-            self._sessions = tuple( ses.split( "," ) )
-        else:
-            # Load Defaults
-            for attr in self._PRJ_SECTION:
-                setattr( self, attr, self._DEFAULTS[ attr ] )
+        self._settings_path = enfTool.getProjectSettings( prj_path )
+        self._prjconf = ConfigParser.RawConfigParser()
+        self._genericConfLoader( self._prjconf, self._settings_path, self._PRJ_ATTERS, self._PRJ_SECTION )
     
     
+    def _saveProjectSettings( self ):
+        print( "Save project settings" + self._settings_path )
+        self._genericConfSaver( self._prjconf, self._settings_path, self._PRJ_ATTERS, self._PRJ_SECTION )
+        
+        
     def _loadAppCfg( self ):
-        # _genericConfLoader( self._config.read, self._cfg_fqp, self._CFG_SECTION, self._SAVED_ATTERS )
-        if( os.path.isfile( self._cfg_fqp ) ):
-            self._config.read( self._cfg_fqp )            
-            for attr in self._SAVED_ATTERS:
-                try:
-                    val = self._config.get( self._CFG_SECTION, attr )
-                except ConfigParser.NoOptionError:
-                    val = self._DEFAULTS[ attr ]
-                setattr( self, attr, val )
-        else:
-            # Load Defaults
-            for attr in self._SAVED_ATTERS:
-                setattr( self, attr, self._DEFAULTS[ attr ] )
-            
+        self._genericConfLoader( self._config, self._cfg_fqp, self._SAVED_ATTERS, self._CFG_SECTION )
         # update list data
         self._updateClientList()
         self._updateProjectList()
@@ -161,7 +158,7 @@ class DayBuild( QtGui.QWidget ):
         self.prj_path = "{}{}{}".format( self.current_client, os.path.sep, self.current_project )
         self._project_path.setText( self.prj_path )
         # Get Project Settings
-        self._getProjectSettings()
+        self._loadProjectSettings()
         self._session_name.setText( self.last_desc )
         self._saveAppCfg()
         
@@ -202,19 +199,16 @@ class DayBuild( QtGui.QWidget ):
     def _clientChangeCB( self ):
         # Hack to dodge Recursion error
         self._clients_combo.currentIndexChanged.disconnect()
-        
+        # /hack
         self.client_idx = self._clients_combo.currentIndex()
         self.current_client = self._clients_combo.itemText( self.client_idx )
-        
-        # TODO: update client's last used project from client globals
         self.project_idx = 0
-        
         self._updateProjectList()
         self.current_project = self.project_list[ self.project_idx ]
         self._updateCpUi()
         # Hack to dodge Recursion error
         self._clients_combo.currentIndexChanged.connect( self._clientChangeCB )
-        
+        # /hack
         
     def _setStage( self ):
         loc_idx = self._location.findText( self.current_location )
@@ -225,14 +219,12 @@ class DayBuild( QtGui.QWidget ):
     def _stageCB( self ):
         self.current_location = self._location.itemText( self._location.currentIndex() )
         self.current_stage = self._stage.value()
-        # save location & stage to project ini
         
         
     def generate( self ):
         prj_path = self.vicon_root + self.prj_path + os.sep
         dayname = self._session_name.text()
         suffix = enfTool.biggestSuffix( prj_path, dayname ) + 1
-        # TODO: determine highest suffix of 'session_name' in list of days
         meta_data = {
             "daycode" : self._date_code.text(),
             "location": self.current_location,
@@ -244,6 +236,7 @@ class DayBuild( QtGui.QWidget ):
         print( "enfTool -createDay -prj '{}' -day '{}'".format( prj_path, day_code ) )
         for session in self._sessions:
             print( "enfTool -createSession -prj '{}' -day '{}' -ses '{}'".format( prj_path, day_code, session ) )
+        self._saveProjectSettings()
         
         
     def _buildUI( self ):
