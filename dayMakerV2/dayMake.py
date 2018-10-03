@@ -20,13 +20,14 @@ class DayBuild( QtGui.QWidget ):
     _PRJ_CASTS    = ( str, int, str, str, str )
     
     
-    def __init__( self, parent_app ):
+    def __init__( self, parent_app, clean_start=False ):
         super( DayBuild, self ).__init__()
         self._local_data = os.getenv( "LOCALAPPDATA" )
         self._config = ConfigParser.RawConfigParser()
         self._config.add_section( self._CFG_SECTION )
         self._cfg_fqp = os.path.join( self._local_data, self._CFG_FILENAME )
         self._parent_app = parent_app
+        self.clean_start  = clean_start # TODO: don't load cfg
         self._loadAppCfg()
         self._initDate()
         self._buildUI()
@@ -77,11 +78,12 @@ class DayBuild( QtGui.QWidget ):
                 setattr( self, attr, val )
         else:
             # Defaults
-            self.vicon_root      = "C:\\ViconDD\\"
+            self.vicon_root      = "C:\\ViconDB\\"
             self.current_client  = "Framestore"
             self.current_project = "Gravity"
             self.day_format      = "{daycode}_{location}{stage}_{dayname}_{suffix:0>2}"
             self.datecode_format = "%y%m%d"
+            self.day_validation  = "[A-Za-z0-9_]+"
             
         # update list data
         self._updateClientList()
@@ -277,6 +279,8 @@ class DayBuild( QtGui.QWidget ):
         
         self._session_name = QtGui.QLineEdit( "CaptureDay", self )
         self._session_name.setReadOnly( False )
+        anon = QtGui.QRegExpValidator( QtCore.QRegExp( self.day_validation ) )
+        self._session_name.setValidator( anon )
         tmp_cd_grid.addWidget( self._session_name, 2, 1, 1, 4 )
         
         self._date_lock = QtGui.QCheckBox( "Unlock Datecode", self )
