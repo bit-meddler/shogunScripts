@@ -77,7 +77,7 @@ class DayBuild( QtGui.QWidget ):
                 setattr( self, attr, val )
         else:
             # Defaults
-            self.vicon_root      = "C:\\ViconData\\"
+            self.vicon_root      = "C:\\ViconDD\\"
             self.current_client  = "Framestore"
             self.current_project = "Gravity"
             self.day_format      = "{daycode}_{location}{stage}_{dayname}_{suffix:0>2}"
@@ -87,9 +87,14 @@ class DayBuild( QtGui.QWidget ):
         self._updateClientList()
         self._updateProjectList()
         # set UI
-        self.client_idx  = self.client_list.index(  self.current_client   )
-        self.project_idx = self.project_list.index( self.cukrrent_project )
-
+        try:
+            self.client_idx = self.client_list.index( self.current_client )
+        except ValueError:
+            self.client_idx = 0
+        try:
+            self.project_idx = self.project_list.index( self.current_project )
+        except ValueError:
+            self.project_idx = 0
         
     def _saveAppCfg( self ):
         for attr in self._SAVED_ATTERS:

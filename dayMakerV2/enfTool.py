@@ -15,7 +15,7 @@ _MATCH_LAST_DIGITS = re.compile( '.*?([0-9]+)$', re.I )
 def _absENFscan( path, error, search=None ):
     if not os.path.isdir( path ):
         print( error )
-        exit()
+        #exit()
     # List dirs with an enf in them
     if( search is None ):
         search = os.path.join( path, "*", "*.enf" )
