@@ -96,6 +96,7 @@ class DayBuild( QtGui.QWidget ):
                 setattr( self, attr, val )
         else:
             # Load Defaults
+            print( "Loading Defaults" )
             for attr in keys:
                 setattr( self, attr, self._DEFAULTS[ attr ] )
                 
@@ -120,10 +121,9 @@ class DayBuild( QtGui.QWidget ):
         self._settings_path = enfTool.getProjectSettings( prj_path )
         self._prjconf = ConfigParser.RawConfigParser()
         self._genericConfLoader( self._prjconf, self._settings_path, self._PRJ_ATTERS, self._PRJ_SECTION )
-    
+        
     
     def _saveProjectSettings( self ):
-        print( "Save project settings" + self._settings_path )
         self._genericConfSaver( self._prjconf, self._settings_path, self._PRJ_ATTERS, self._PRJ_SECTION )
         
         
@@ -160,6 +160,7 @@ class DayBuild( QtGui.QWidget ):
         # Get Project Settings
         self._loadProjectSettings()
         self._session_name.setText( self.last_desc )
+        self._setStage()
         self._saveAppCfg()
         
     
@@ -224,6 +225,7 @@ class DayBuild( QtGui.QWidget ):
     def generate( self ):
         prj_path = self.vicon_root + self.prj_path + os.sep
         dayname = self._session_name.text()
+        self.last_desc = dayname
         suffix = enfTool.biggestSuffix( prj_path, dayname ) + 1
         meta_data = {
             "daycode" : self._date_code.text(),
