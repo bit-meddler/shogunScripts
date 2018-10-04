@@ -12,7 +12,7 @@ def _passThru( x ):
     return x
 
     
-class DayBuild( QtGui.QWidget ):
+class DayBuild( QtGui.QMainWindow ):
 
     _CFG_FILENAME =   "dayBuild.cfg"
     _CFG_SECTION  =   "SYSTEM"
@@ -61,12 +61,14 @@ class DayBuild( QtGui.QWidget ):
 
     def __init__( self, parent_app, clean_start=False ):
         super( DayBuild, self ).__init__()
+        
         self._local_data = os.getenv( "LOCALAPPDATA" )# Multiplatform?
         self._config = ConfigParser.RawConfigParser()
         self._config.add_section( self._CFG_SECTION )
         self._cfg_fqp = os.path.join( self._local_data, self._CFG_FILENAME )
         self._parent_app = parent_app
         self.clean_start  = clean_start # TODO: don't load cfg
+        
         self._loadAppCfg()
         self._initDate()
         self._buildUI()
@@ -141,16 +143,16 @@ class DayBuild( QtGui.QWidget ):
             self.project_idx = self.project_list.index( self.current_project )
         except ValueError:
             self.project_idx = 0
-        
-        
+
+
     def _saveAppCfg( self ):
         for attr in self._SAVED_ATTERS:
             self._config.set( self._CFG_SECTION, attr, getattr( self, attr ) )
         fh = open( self._cfg_fqp, "w" )
         self._config.write( fh )
         fh.close()
-            
-        
+
+
     def _updatePath( self ):
         self.project_idx = self._project_combo.currentIndex()
         self.current_project = self._project_combo.itemText( self.project_idx )
@@ -343,7 +345,7 @@ class DayBuild( QtGui.QWidget ):
         
         tmp_cd_grp.setLayout( tmp_cd_grid )
         
-        # Add Menu Bar #########################################################
+        # Add Menu Bar #############################################################
         self._menuBar = QtGui.QMenuBar( self )
         self._menuBar.setNativeMenuBar( False ) # Hack to Exit
         file_m = self._menuBar.addMenu( '&File' )
@@ -356,7 +358,7 @@ class DayBuild( QtGui.QWidget ):
         proj_itm = QtGui.QAction( '&Project', self )        
         proj_itm.triggered.connect( self._launchPrjSettings )
         settings_m.addAction( proj_itm )
-
+        
         sys_itm = QtGui.QAction( '&System', self )        
         sys_itm.triggered.connect( self._launchSysSettings )
         settings_m.addAction( sys_itm )
@@ -367,9 +369,12 @@ class DayBuild( QtGui.QWidget ):
         tmp_vbox.addWidget( tmp_sp_grp )
         tmp_vbox.addWidget( tmp_cd_grp )
         tmp_vbox.addStretch( 1 )
-        self.setLayout( tmp_vbox )
-       
-
+        
+        # Hack to get working menu bar
+        qw = QtGui.QWidget()
+        qw.setLayout( tmp_vbox )
+        self.setCentralWidget( qw )
+        
         # generate comboBox items
         self._updateCpUi()
         self._projectLockCB()
@@ -384,11 +389,11 @@ class DayBuild( QtGui.QWidget ):
         self._clients_combo.currentIndexChanged.connect( self._clientChangeCB )
         self._location.currentIndexChanged.connect( self._stageCB )
         self._stage.valueChanged.connect( self._stageCB )
-        
+        self._generate.setFocus()
         
     def run( self ):
         self.show()
-        self._generate.setFocus()
+        #self._generate.setFocus()
         self._parent_app.exec_()
         
         
