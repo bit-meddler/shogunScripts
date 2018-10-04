@@ -239,8 +239,16 @@ class DayBuild( QtGui.QWidget ):
         for session in self._sessions:
             print( "enfTool -createSession -prj '{}' -day '{}' -ses '{}'".format( prj_path, day_code, session ) )
         self._saveProjectSettings()
+
         
-        
+    def _launchPrjSettings( self ):
+        print( "Project Settings" )
+
+
+    def _launchSysSettings( self ):
+        print( "System Settings" )
+
+     
     def _buildUI( self ):
         self.setWindowTitle( "Make my Day - V2.0.1" )
         boxWidth = 100
@@ -334,19 +342,37 @@ class DayBuild( QtGui.QWidget ):
         tmp_cd_grid.addWidget( self._generate, 3, 3, 1, 1 )
         
         tmp_cd_grp.setLayout( tmp_cd_grid )
+        
+        # Add Menu Bar #########################################################
+        self._menuBar = QtGui.QMenuBar( self )
+        self._menuBar.setNativeMenuBar( False ) # Hack to Exit
+        file_m = self._menuBar.addMenu( '&File' )
+        settings_m = self._menuBar.addMenu( '&Settings' )
+        
+        exit_itm = QtGui.QAction( 'E&xit', self )        
+        exit_itm.triggered.connect( QtGui.qApp.quit )
+        file_m.addAction( exit_itm )
 
+        proj_itm = QtGui.QAction( '&Project', self )        
+        proj_itm.triggered.connect( self._launchPrjSettings )
+        settings_m.addAction( proj_itm )
+
+        sys_itm = QtGui.QAction( '&System', self )        
+        sys_itm.triggered.connect( self._launchSysSettings )
+        settings_m.addAction( sys_itm )
+        
         # Assemble UI ###############################################################
         tmp_vbox = QtGui.QVBoxLayout()
+        tmp_vbox.addWidget( self._menuBar )
         tmp_vbox.addWidget( tmp_sp_grp )
         tmp_vbox.addWidget( tmp_cd_grp )
         tmp_vbox.addStretch( 1 )
-        self.setLayout( tmp_vbox ) 
-        
+        self.setLayout( tmp_vbox )
+       
+
         # generate comboBox items
         self._updateCpUi()
         self._projectLockCB()
-        # self._dateLockCB()
-        # self._updatePath()
         self._setStage()
         self._stageCB()
         
