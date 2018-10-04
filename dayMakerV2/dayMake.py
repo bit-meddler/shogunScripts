@@ -147,6 +147,17 @@ class DBlogic( object ):
 
 class DayBuild( QtGui.QMainWindow ):
 
+    class DBPrjSettings( QtGui.QWidget ):
+
+        def __init__( self, parent_app ):
+            super( DayBuild.DBPrjSettings, self ).__init__()
+            self._parent_app = parent_app
+            self._buildUI()
+            
+        def _buildUI( self ):
+            pass
+
+    
     def __init__( self, parent_app, clean_start=False ):
         super( DayBuild, self ).__init__()
         self._parent_app = parent_app
@@ -233,7 +244,9 @@ class DayBuild( QtGui.QMainWindow ):
     
     def _launchPrjSettings( self ):
         print( "Project Settings" )
-
+        self._prjPopup = self.DBPrjSettings( self._parent_app )
+        self._prjPopup.show()
+        
     def _launchSysSettings( self ):
         print( "System Settings" )
 
