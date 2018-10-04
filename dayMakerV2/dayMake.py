@@ -11,9 +11,7 @@ import enfTool
 def _passThru( x ):
     return x
 
-    
-class DayBuild( QtGui.QMainWindow ):
-
+class DBlogic( object ):
     _CFG_FILENAME =   "dayBuild.cfg"
     _CFG_SECTION  =   "SYSTEM"
     _PRJ_SECTION  =   "DAYSETTINGS"
@@ -58,34 +56,25 @@ class DayBuild( QtGui.QMainWindow ):
         "last_desc"       : _passThru,
     }
     
-
-    def __init__( self, parent_app, clean_start=False ):
-        super( DayBuild, self ).__init__()
-        
+    def __init__( self, clean_start=False ):
+        super( DBlogic, self ).__init__()
         self._local_data = os.getenv( "LOCALAPPDATA" )# Multiplatform?
         self._config = ConfigParser.RawConfigParser()
         self._config.add_section( self._CFG_SECTION )
         self._cfg_fqp = os.path.join( self._local_data, self._CFG_FILENAME )
-        self._parent_app = parent_app
         self.clean_start  = clean_start # TODO: don't load cfg
-        
         self._loadAppCfg()
         self._initDate()
-        self._buildUI()
-    
-    
+        
     def _initDate( self ):
         now = datetime.datetime.now()
         self.datecode = now.strftime( self.datecode_format )
         
-        
     def _updateClientList( self ):
         self.client_list  = enfTool.scanDB( self.vicon_root )
         
-        
     def _updateProjectList( self ):
         self.project_list = enfTool.scanProjects(self.vicon_root+self.current_client+os.path.sep)
-        
         
     def _genericConfLoader( self, parser, path, keys, section ):
         if( os.path.isfile( path ) ):
@@ -102,7 +91,6 @@ class DayBuild( QtGui.QMainWindow ):
             for attr in keys:
                 setattr( self, attr, self._DEFAULTS[ attr ] )
                 
-                
     def _genericConfSaver( self, parser, path, keys, section ):
         # safty for new
         if( not parser.has_section( section ) ):
@@ -115,7 +103,6 @@ class DayBuild( QtGui.QMainWindow ):
         parser.write( fh )
         fh.close()
         
-        
     def _loadProjectSettings( self ):
         # TODO: find a placce to save out Project settings per host
         #hostname = platform.uname()[1]
@@ -124,26 +111,14 @@ class DayBuild( QtGui.QMainWindow ):
         self._prjconf = ConfigParser.RawConfigParser()
         self._genericConfLoader( self._prjconf, self._settings_path, self._PRJ_ATTERS, self._PRJ_SECTION )
         
-    
     def _saveProjectSettings( self ):
         self._genericConfSaver( self._prjconf, self._settings_path, self._PRJ_ATTERS, self._PRJ_SECTION )
-        
         
     def _loadAppCfg( self ):
         self._genericConfLoader( self._config, self._cfg_fqp, self._SAVED_ATTERS, self._CFG_SECTION )
         # update list data
         self._updateClientList()
         self._updateProjectList()
-        # set UI
-        try:
-            self.client_idx = self.client_list.index( self.current_client )
-        except ValueError:
-            self.client_idx = 0
-        try:
-            self.project_idx = self.project_list.index( self.current_project )
-        except ValueError:
-            self.project_idx = 0
-
 
     def _saveAppCfg( self ):
         for attr in self._SAVED_ATTERS:
@@ -152,85 +127,12 @@ class DayBuild( QtGui.QMainWindow ):
         self._config.write( fh )
         fh.close()
 
-
-    def _updatePath( self ):
-        self.project_idx = self._project_combo.currentIndex()
-        self.current_project = self._project_combo.itemText( self.project_idx )
-        # Compose 
-        self.prj_path = "{}{}{}".format( self.current_client, os.path.sep, self.current_project )
-        self._project_path.setText( self.prj_path )
-        # Get Project Settings
-        self._loadProjectSettings()
-        self._session_name.setText( self.last_desc )
-        self._setStage()
-        self._saveAppCfg()
-        
-    
-    def _updateCpUi( self ):
-        # Sanity test
-        if( ( len( self.client_list ) == 0 ) or ( len( self.project_list ) == 0 ) ):
-            return
-        # update combos
-        self._clients_combo.clear() 
-        self._project_combo.clear()
-        self._clients_combo.addItems( self.client_list  )
-        self._project_combo.addItems( self.project_list )
-        self._clients_combo.setCurrentIndex( self.client_idx  )
-        self._project_combo.setCurrentIndex( self.project_idx )
-        # Look at client/project current stage?
-        
-        
-    def _projectLockCB( self ):
-        lock = not self._project_lock.isChecked()
-        self._new_prj.setEnabled( lock )
-        self._clients_combo.setEnabled( lock )
-        self._project_combo.setEnabled( lock )
-        if not lock: # When applying lock, update
-            self._updatePath()
-        
-        
-    def _chooseCP( self, innerCall=False ):
-        # get selected project
-        self._project_lock.setCheckState( QtCore.Qt.Checked )
-        
-        
-    def _dateLockCB( self ):
-        lock = not self._date_lock.isChecked()
-        self._date_code.setReadOnly( lock )
-    
-    
-    def _clientChangeCB( self ):
-        # Hack to dodge Recursion error
-        self._clients_combo.currentIndexChanged.disconnect()
-        # /hack
-        self.client_idx = self._clients_combo.currentIndex()
-        self.current_client = self._clients_combo.itemText( self.client_idx )
-        self.project_idx = 0
-        self._updateProjectList()
-        self.current_project = self.project_list[ self.project_idx ]
-        self._updateCpUi()
-        # Hack to dodge Recursion error
-        self._clients_combo.currentIndexChanged.connect( self._clientChangeCB )
-        # /hack
-        
-    def _setStage( self ):
-        loc_idx = self._location.findText( self.current_location )
-        self._location.setCurrentIndex( loc_idx )
-        self._stage.setValue( self.current_stage )
-        
-        
-    def _stageCB( self ):
-        self.current_location = self._location.itemText( self._location.currentIndex() )
-        self.current_stage = self._stage.value()
-        
-        
-    def generate( self ):
+    def generate( self, dayname, daycode ):
         prj_path = self.vicon_root + self.prj_path + os.sep
-        dayname = self._session_name.text()
         self.last_desc = dayname
         suffix = enfTool.biggestSuffix( prj_path, dayname ) + 1
         meta_data = {
-            "daycode" : self._date_code.text(),
+            "daycode" : daycode,
             "location": self.current_location,
             "stage"   : self.current_stage,
             "dayname" : dayname,
@@ -241,16 +143,100 @@ class DayBuild( QtGui.QMainWindow ):
         for session in self._sessions:
             print( "enfTool -createSession -prj '{}' -day '{}' -ses '{}'".format( prj_path, day_code, session ) )
         self._saveProjectSettings()
-
         
+
+class DayBuild( QtGui.QMainWindow ):
+
+    def __init__( self, parent_app, clean_start=False ):
+        super( DayBuild, self ).__init__()
+        self._parent_app = parent_app
+        # Initiate Logic
+        self.logic = DBlogic()
+        # run once??
+        try:
+            self.client_idx = self.logic.client_list.index( self.logic.current_client )
+        except ValueError:
+            self.client_idx = 0
+        try:
+            self.project_idx = self.logic.project_list.index( self.logic.current_project )
+        except ValueError:
+            self.project_idx = 0
+        # Build UI
+        self._buildUI()
+
+    def _updatePath( self ):
+        self.project_idx = self._project_combo.currentIndex()
+        self.logic.current_project = self._project_combo.itemText( self.project_idx )
+        # Compose 
+        self.logic.prj_path = "{}{}{}".format( self.logic.current_client, os.path.sep, self.logic.current_project )
+        self._project_path.setText( self.logic.prj_path )
+        # Get Project Settings
+        self.logic._loadProjectSettings()
+        self._session_name.setText( self.logic.last_desc )
+        self._setStage()
+        self.logic._saveAppCfg()
+    
+    def _updateCpUi( self ):
+        # Sanity test
+        if( ( len( self.logic.client_list ) == 0 ) or ( len( self.logic.project_list ) == 0 ) ):
+            return
+        # update combos
+        self._clients_combo.clear() 
+        self._project_combo.clear()
+        self._clients_combo.addItems( self.logic.client_list  )
+        self._project_combo.addItems( self.logic.project_list )
+        self._clients_combo.setCurrentIndex( self.client_idx  )
+        self._project_combo.setCurrentIndex( self.project_idx )
+        # Look at client/project current stage?
+        
+    def _projectLockCB( self ):
+        lock = not self._project_lock.isChecked()
+        self._new_prj.setEnabled( lock )
+        self._clients_combo.setEnabled( lock )
+        self._project_combo.setEnabled( lock )
+        if not lock: # When applying lock, update
+            self._updatePath()
+        
+    def generate( self ):
+        self.logic.generate( self._session_name.text(), self._date_code.text() )
+        
+    def _chooseCP( self, innerCall=False ):
+        # get selected project
+        self._project_lock.setCheckState( QtCore.Qt.Checked )
+        
+    def _dateLockCB( self ):
+        lock = not self._date_lock.isChecked()
+        self._date_code.setReadOnly( lock )
+    
+    def _clientChangeCB( self ):
+        # Hack to dodge Recursion error
+        self._clients_combo.currentIndexChanged.disconnect()
+        # /hack
+        self.client_idx = self._clients_combo.currentIndex()
+        self.logic.current_client = self._clients_combo.itemText( self.client_idx )
+        self.project_idx = 0
+        self.logic._updateProjectList()
+        self.logic.current_project = self.logic.project_list[ self.project_idx ]
+        self._updateCpUi()
+        # Hack to dodge Recursion error
+        self._clients_combo.currentIndexChanged.connect( self._clientChangeCB )
+        # /hack
+        
+    def _setStage( self ):
+        loc_idx = self._location.findText( self.logic.current_location )
+        self._location.setCurrentIndex( loc_idx )
+        self._stage.setValue( self.logic.current_stage )
+        
+    def _stageCB( self ):
+        self.logic.current_location = self._location.itemText( self._location.currentIndex() )
+        self.logic.current_stage = self._stage.value()
+    
     def _launchPrjSettings( self ):
         print( "Project Settings" )
-
 
     def _launchSysSettings( self ):
         print( "System Settings" )
 
-     
     def _buildUI( self ):
         self.setWindowTitle( "Make my Day - V2.0.1" )
         boxWidth = 100
@@ -303,7 +289,7 @@ class DayBuild( QtGui.QMainWindow ):
         anon = QtGui.QLabel( "Datecode", self )
         tmp_cd_grid.addWidget( anon, 0, 0, 1, 1 )
         
-        self._date_code = QtGui.QLineEdit( self.datecode, self )
+        self._date_code = QtGui.QLineEdit( self.logic.datecode, self )
         self._date_code.setMaximumWidth( 75 )
         self._date_code.setReadOnly( True )
         tmp_cd_grid.addWidget( self._date_code, 1, 0, 1, 1 )
@@ -332,7 +318,7 @@ class DayBuild( QtGui.QMainWindow ):
         
         self._session_name = QtGui.QLineEdit( "CaptureDay", self )
         self._session_name.setReadOnly( False )
-        anon = QtGui.QRegExpValidator( QtCore.QRegExp( self.day_validation ) )
+        anon = QtGui.QRegExpValidator( QtCore.QRegExp( self.logic.day_validation ) )
         self._session_name.setValidator( anon )
         tmp_cd_grid.addWidget( self._session_name, 2, 1, 1, 4 )
         
