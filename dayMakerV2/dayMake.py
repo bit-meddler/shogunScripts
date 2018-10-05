@@ -71,10 +71,13 @@ class DBlogic( object ):
         self.datecode = now.strftime( self.datecode_format )
         
     def _updateClientList( self ):
+        # print( "enfTool --scanDB -p {}".format( self.vicon_root ) )
         self.client_list  = enfTool.scanDB( self.vicon_root )
         
     def _updateProjectList( self ):
-        self.project_list = enfTool.scanProjects(self.vicon_root+self.current_client+os.path.sep)
+        prj_path = self.vicon_root + self.current_client + os.path.sep
+        # print( "enfTool --scanProjects -p {}".format( prj_path ) )
+        self.project_list = enfTool.scanProjects( prj_path )
         
     def _genericConfLoader( self, parser, path, keys, section ):
         if( os.path.isfile( path ) ):
@@ -104,6 +107,7 @@ class DBlogic( object ):
         fh.close()
         
     def _loadProjectSettings( self ):
+        # print( "enfTool --getProjectSettings -p {}".format( prj_path ) )
         # TODO: find a placce to save out Project settings per host
         #hostname = platform.uname()[1]
         prj_path = self.vicon_root + self.prj_path + os.sep
@@ -128,6 +132,7 @@ class DBlogic( object ):
         fh.close()
 
     def generate( self, dayname, daycode ):
+        # print( "enfTool --biggestSuffix -p {} -t {}".format( prj_path, dayname ) )
         prj_path = self.vicon_root + self.prj_path + os.sep
         self.last_desc = dayname
         suffix = enfTool.biggestSuffix( prj_path, dayname ) + 1
@@ -143,25 +148,35 @@ class DBlogic( object ):
         for session in self._sessions:
             print( "enfTool -createSession -prj '{}' -day '{}' -ses '{}'".format( prj_path, day_code, session ) )
         self._saveProjectSettings()
-        
+
+
+class SelfConfProps( QtGui.QWidget ):
+    # Experimental.
+    # Self configuring UI, based on 'Type' and a dict of 'Type-options'
+    # Types: int, float, string, bool, vec3, Xchoice
+    # Type Options: min, max, step_lo, step_mid, step_hi, validator, read_cast, write_cast
+    X = { "key" : ( "Label", "ToolTip Text", "Type", "Default", {"Type-Options":None} ) }
+    pass
+    
 
 class DayBuild( QtGui.QMainWindow ):
 
     class DBPrjSettings( QtGui.QWidget ):
 
-        def __init__( self, parent_app ):
+        def __init__( self, parent_app, logic ):
             super( DayBuild.DBPrjSettings, self ).__init__()
             self._parent_app = parent_app
+            self._logic_ref  = logic
             self._buildUI()
             
         def _buildUI( self ):
             pass
 
-    
+
     def __init__( self, parent_app, clean_start=False ):
         super( DayBuild, self ).__init__()
         self._parent_app = parent_app
-        # Initiate Logic
+        # Initiate Logic - Load Sys
         self.logic = DBlogic()
         # run once??
         try:
@@ -244,11 +259,13 @@ class DayBuild( QtGui.QMainWindow ):
     
     def _launchPrjSettings( self ):
         print( "Project Settings" )
-        self._prjPopup = self.DBPrjSettings( self._parent_app )
+        self._prjPopup = self.DBPrjSettings( self._parent_app, self.logic )
         self._prjPopup.show()
         
     def _launchSysSettings( self ):
         print( "System Settings" )
+        self._prjPopup = self.DBPrjSettings( self._parent_app, self.logic )
+        self._prjPopup.show()
 
     def _buildUI( self ):
         self.setWindowTitle( "Make my Day - V2.0.1" )
