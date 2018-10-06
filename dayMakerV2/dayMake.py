@@ -56,6 +56,38 @@ class DBlogic( object ):
         "last_desc"       : _passThru,
     }
     
+    _PROPERTIES = {
+        #"key" : ( "Label", "ToolTip Text", "Type", "Default", {"Type-Options":None} )
+        "vicon_root" : ( "Vicon Root",
+                         "Path to the location of the Vicon Database.",
+                         "string",
+                         "C:\\ViconDB\\",
+                         {} ),
+        "datecode_format" : ( "Date Code Format",
+                         "Format of Date code, like timesfmt. %y, %m, %d are zero padded.",
+                         "string",
+                         "%y%m%d",
+                         {"validator":"[A-Za-z%]+"} ),
+        "day_format" : ( "Capture Day Format",
+                         "Format of 'capture day' string.  This is a python format block using {}'s to enclose keys.  Currently supported keys are: daycode, location, stage, dayname, and suffix.",
+                         "string",
+                         "{daycode}_{location}{stage}_{dayname}{suffix:0>2}",
+                         {} ), # TODO: Elaborate validator
+        "day_validation" : ( "Day Validation RegEx",
+                         "A RegEx to Validate allowable capture day names.",
+                         "string",
+                         "[A-Za-z0-9_]+",
+                         {} ),
+        "_sessions" : ( "Sessions",
+                         "Comma Separated list of Sessions a Capture day  typically requires",
+                         "string",
+                         ( "CAL", "ROM", "AM", "PM" ),
+                         {  "write_cast" : lambda x: tuple( x.split( "," ) ),
+                            "read_cast"  : lambda x: ",".join( x )
+                         } ),
+                         
+    }
+    
     def __init__( self, clean_start=False ):
         super( DBlogic, self ).__init__()
         self._local_data = os.getenv( "LOCALAPPDATA" )# Multiplatform?
@@ -151,14 +183,59 @@ class DBlogic( object ):
 
 
 class SelfConfProps( QtGui.QWidget ):
-    # Experimental.
-    # Self configuring UI, based on 'Type' and a dict of 'Type-options'
-    # Types: int, float, string, bool, vec3, Xchoice
+    # Experimental, Self configuring properties.
+    # UI based on 'Type' and a dict of 'Type-options'
+    # Types: int, float, string, bool, vec3, Xchoice, Mchoice
     # Type Options: min, max, step_lo, step_mid, step_hi, validator, read_cast, write_cast
-    X = { "key" : ( "Label", "ToolTip Text", "Type", "Default", {"Type-Options":None} ) }
-    pass
+    # = { "key" : ( "Label", "ToolTip Text", "Type", "Default", {"Type-Options":None} ) }
+    def __init__( self, parent_app, prop_dict, properties, title ):
+        super( SelfConfProps, self ).__init__()
+        self._parent_app = parent_app
+        self._pd_ref = prop_dict
+        self._properties = properties
+        self._register = {}
+        # Prep UI
+        self.setWindowTitle( title )
+        tmp_grid = QtGui.QGridLayout()
+        # Assemble
+        row = 0
+        for key in self._properties:
+            lbl, tip, p_type, default, opts = self._pd_ref[ key ]
+            # Label
+            anon = QtGui.QLabel( lbl, self )
+            tmp_grid.addWidget( anon, row, 0, 1, 1 )
+            # input cases
+            anon = None
+            if( p_type is None ):
+                continue
+            elif( p_type == "string" ):
+                anon = QtGui.QLineEdit( self )
+                # default
+                txt = ""
+                if( "read_cast" in opts ):
+                    txt = opts[ "read_cast" ]( default )
+                else:
+                    txt = default
+                # validation
+				anon.setText( txt )
+                if( "validator" in opts ):
+                    val = QtGui.QRegExpValidator( QtCore.QRegExp( opts[ "validator" ] ) )
+                    anon.setValidator( val )
+            # done switching
+            tmp_grid.addWidget( anon, row, 1, 1, 1 )
+            self._register( key, anon )
+            row += 1
+        # Finalize
+        self.setLayout( tmp_grid )
+        
+    def _publish( self ):
+        # TODO: read_cast
+        ret = {}
+        for prop in self.properties:
+            ret[ prop ] = self._register[ prop ].value()
+        return ret
+        
     
-
 class DayBuild( QtGui.QMainWindow ):
 
     class DBPrjSettings( QtGui.QWidget ):
@@ -167,11 +244,17 @@ class DayBuild( QtGui.QMainWindow ):
             super( DayBuild.DBPrjSettings, self ).__init__()
             self._parent_app = parent_app
             self._logic_ref  = logic
+            self._pw = None
+            
+        def setProps( self, prop_dict, properties, title ):
+            self._pw = SelfConfProps( self.parent_app, prop_dict, properties, title )
             self._buildUI()
             
         def _buildUI( self ):
-            pass
-
+            if( self._pw is None ):
+                return
+                
+            
 
     def __init__( self, parent_app, clean_start=False ):
         super( DayBuild, self ).__init__()
@@ -260,6 +343,7 @@ class DayBuild( QtGui.QMainWindow ):
     def _launchPrjSettings( self ):
         print( "Project Settings" )
         self._prjPopup = self.DBPrjSettings( self._parent_app, self.logic )
+        self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._PRJ_ATTERS, "Project Settings" )
         self._prjPopup.show()
         
     def _launchSysSettings( self ):
