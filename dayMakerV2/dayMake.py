@@ -111,8 +111,13 @@ class DBlogic( object ):
         prj_path = self.vicon_root + self.current_client + os.path.sep
         # print( "enfTool --scanProjects -p {}".format( prj_path ) )
         self.project_list = enfTool.scanProjects( prj_path )
-        
+
+    def acceptDict( self, update ):
+        for k, v in update.iteritems():
+            setattr( self, k, v )
+            
     def _genericConfLoader( self, parser, path, keys, section ):
+        update = {}
         if( os.path.isfile( path ) ):
             parser.read( path )            
             for attr in keys:
@@ -120,13 +125,15 @@ class DBlogic( object ):
                     val = self._READ_CASTS[ attr ]( parser.get( section, attr ) )
                 except ConfigParser.NoOptionError:
                     val = self._DEFAULTS[ attr ]
-                setattr( self, attr, val )
+                update[ attr ] = val
         else:
             # Load Defaults
             print( "Loading Defaults" )
             for attr in keys:
-                setattr( self, attr, self._DEFAULTS[ attr ] )
-                
+                update[ attr ] = self._DEFAULTS[ attr ]
+        # execute
+        self.acceptDict( update )
+        
     def _genericConfSaver( self, parser, path, keys, section ):
         # safty for new
         if( not parser.has_section( section ) ):
@@ -183,22 +190,25 @@ class DBlogic( object ):
         self._saveProjectSettings()
 
 
-class SelfConfProps( QtGui.QWidget ):
+class PropPane( QtGui.QWidget ):
     # Experimental, Self configuring properties.
     # UI based on 'Type' and a dict of 'Type-options'
     # Types: int, float, string, bool, vec3, Xchoice, Mchoice
-    # Type Options: min, max, step_lo, step_mid, step_hi, validator, read_cast, write_cast
+    # Type Options: min, max, step_lo, step_mid, step_hi, validator, read_cast, write_cast, preview*
+    #   *preview : a display of the result of user's changes to a setting.  I'm thinking Regexs.
+    # read/write casting, unified acces, Maya-Like dragging could be acheved with custome Widgets
     # = { "key" : ( "Label", "ToolTip Text", "Type", "Default", {"Type-Options":None} ) }
     def __init__( self, parent_app, prop_dict, properties, title ):
-        super( SelfConfProps, self ).__init__()
+        super( PropPane, self ).__init__()
         self._parent_app = parent_app
         self._pd_ref = prop_dict
         self._properties = properties
         self._register = {}
         # Prep UI
         self.setWindowTitle( title )
+        # TODO: Should I explicity add a scroll-bar?
         tmp_grid = QtGui.QGridLayout()
-        # Assemble
+        # Properties, Assemble!
         row = 0
         for key in self._properties:
             if( not key in self._pd_ref ):
@@ -238,7 +248,7 @@ class SelfConfProps( QtGui.QWidget ):
         for prop in self._properties:
             if( not prop in self._register ):
                 continue
-            ret[ prop ] = self._register[ prop ].value()#?
+            ret[ prop ] = self._register[ prop ].value() # Yes, I'll need to make my own Widgets.
         return ret
         
     
@@ -246,15 +256,15 @@ class DayBuild( QtGui.QMainWindow ):
 
     class DBPrjSettings( QtGui.QDialog ):
 
-        def __init__( self, parent_app, logic ):
+        def __init__( self, parent_app, update_func ):
             super( DayBuild.DBPrjSettings, self ).__init__()
-            self._parent_app = parent_app
-            self._logic_ref  = logic
+            self._parent_app  = parent_app
+            self._update_func = update_func
             self._pw = None
             self.title = None
             
         def setProps( self, prop_dict, properties, title ):
-            self._pw = SelfConfProps( self._parent_app, prop_dict, properties, title )
+            self._pw = PropPane( self._parent_app, prop_dict, properties, title )
             self.title = title
             self._buildUI()
             
@@ -287,6 +297,7 @@ class DayBuild( QtGui.QMainWindow ):
         def _apply( self ):
             #update self._logic_ref with self._pw.properties
             vals = self._pw._publish()
+            self._update_func( vals )
             self.close()
             
 
@@ -376,14 +387,14 @@ class DayBuild( QtGui.QMainWindow ):
     
     def _launchPrjSettings( self ):
         print( "Project Settings" )
-        self._prjPopup = self.DBPrjSettings( self._parent_app, self.logic )
+        self._prjPopup = self.DBPrjSettings( self._parent_app, self.logic.acceptDict )
         self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._PRJ_ATTERS, "Project Settings" )
         self._prjPopup.show()
         self.logic._saveProjectSettings()
         
     def _launchSysSettings( self ):
         print( "System Settings" )
-        self._prjPopup = self.DBPrjSettings( self._parent_app, self.logic )
+        self._prjPopup = self.DBPrjSettings( self._parent_app, self.logic.acceptDict )
         self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._SYS_ATTERS, "System Settings" )
         self._prjPopup.show()
         self.logic._saveAppCfg()
