@@ -19,6 +19,7 @@ class DBlogic( object ):
                       "day_format", "datecode_format", "day_validation" )
     _PRJ_ATTERS   = ( "current_location", "current_stage", "day_format",
                       "datecode_format", "last_desc", "_sessions" )
+    _SYS_ATTERS   = ( "vicon_root", "day_format", "datecode_format", "day_validation" )
     _DEFAULTS     = {
         "vicon_root"      : "C:\\ViconDB\\",
         "current_client"  : "Framestore",
@@ -200,6 +201,8 @@ class SelfConfProps( QtGui.QWidget ):
         # Assemble
         row = 0
         for key in self._properties:
+            if( not key in self._pd_ref ):
+                continue
             lbl, tip, p_type, default, opts = self._pd_ref[ key ]
             # Label
             anon = QtGui.QLabel( lbl, self )
@@ -217,13 +220,14 @@ class SelfConfProps( QtGui.QWidget ):
                 else:
                     txt = default
                 # validation
-				anon.setText( txt )
+                anon.setText( txt )
                 if( "validator" in opts ):
                     val = QtGui.QRegExpValidator( QtCore.QRegExp( opts[ "validator" ] ) )
                     anon.setValidator( val )
             # done switching
+            anon.setToolTip( tip )
             tmp_grid.addWidget( anon, row, 1, 1, 1 )
-            self._register( key, anon )
+            self._register[ key ] = anon
             row += 1
         # Finalize
         self.setLayout( tmp_grid )
@@ -231,29 +235,59 @@ class SelfConfProps( QtGui.QWidget ):
     def _publish( self ):
         # TODO: read_cast
         ret = {}
-        for prop in self.properties:
-            ret[ prop ] = self._register[ prop ].value()
+        for prop in self._properties:
+            if( not prop in self._register ):
+                continue
+            ret[ prop ] = self._register[ prop ].value()#?
         return ret
         
     
 class DayBuild( QtGui.QMainWindow ):
 
-    class DBPrjSettings( QtGui.QWidget ):
+    class DBPrjSettings( QtGui.QDialog ):
 
         def __init__( self, parent_app, logic ):
             super( DayBuild.DBPrjSettings, self ).__init__()
             self._parent_app = parent_app
             self._logic_ref  = logic
             self._pw = None
+            self.title = None
             
         def setProps( self, prop_dict, properties, title ):
-            self._pw = SelfConfProps( self.parent_app, prop_dict, properties, title )
+            self._pw = SelfConfProps( self._parent_app, prop_dict, properties, title )
+            self.title = title
             self._buildUI()
             
         def _buildUI( self ):
             if( self._pw is None ):
                 return
-                
+            # Layout UI
+            self.setModal( True )
+            self.setWindowTitle( self.title )
+            vbox = QtGui.QVBoxLayout()
+            hbox = QtGui.QHBoxLayout()
+            
+            vbox.addWidget( self._pw )
+        
+            apply_but  = QtGui.QPushButton( "Apply and Save" )
+            cancel_but = QtGui.QPushButton( "Cancel" )
+            hbox.addStretch( 1 )
+            hbox.addWidget( apply_but )
+            hbox.addWidget( cancel_but )
+            
+            vbox.addStretch( 1 )
+            vbox.addLayout( hbox )
+            
+            self.setLayout( vbox )
+            
+            # Hookup Events
+            apply_but.clicked.connect( self._apply )
+            cancel_but.clicked.connect( self.close )
+            
+        def _apply( self ):
+            #update self._logic_ref with self._pw.properties
+            vals = self._pw._publish()
+            self.close()
             
 
     def __init__( self, parent_app, clean_start=False ):
@@ -345,11 +379,14 @@ class DayBuild( QtGui.QMainWindow ):
         self._prjPopup = self.DBPrjSettings( self._parent_app, self.logic )
         self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._PRJ_ATTERS, "Project Settings" )
         self._prjPopup.show()
+        #self.logic.saveProj()
         
     def _launchSysSettings( self ):
         print( "System Settings" )
         self._prjPopup = self.DBPrjSettings( self._parent_app, self.logic )
+        self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._PRJ_ATTERS, "System Settings" )
         self._prjPopup.show()
+        #self.logic.saveSYS
 
     def _buildUI( self ):
         self.setWindowTitle( "Make my Day - V2.0.1" )
