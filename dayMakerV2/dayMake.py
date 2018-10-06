@@ -379,14 +379,14 @@ class DayBuild( QtGui.QMainWindow ):
         self._prjPopup = self.DBPrjSettings( self._parent_app, self.logic )
         self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._PRJ_ATTERS, "Project Settings" )
         self._prjPopup.show()
-        #self.logic.saveProj()
+        self.logic._saveProjectSettings()
         
     def _launchSysSettings( self ):
         print( "System Settings" )
         self._prjPopup = self.DBPrjSettings( self._parent_app, self.logic )
-        self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._PRJ_ATTERS, "System Settings" )
+        self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._SYS_ATTERS, "System Settings" )
         self._prjPopup.show()
-        #self.logic.saveSYS
+        self.logic._saveAppCfg()
 
     def _buildUI( self ):
         self.setWindowTitle( "Make my Day - V2.0.1" )
