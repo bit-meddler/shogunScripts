@@ -89,9 +89,11 @@ class DBlogic( object ):
             "Comma Separated list of Sessions a Capture day typically requires",
             "string",
             ( "CAL", "ROM", "AM", "PM" ),
-            { "write_cast" : lambda x: tuple( x.split( "," ) ),
-              "read_cast"  : lambda x: ",".join( x ),
-              "validator"  : "[A-Za-z#\-_,]+"
+            { "emit_cast" : lambda x: tuple( x.split( "," ) ),
+              "recv_cast" : lambda x: ",".join( x ),
+              "load_cast" : lambda x: tuple( x.split( "," ) ),
+              "save_cast" : lambda x: ",".join( x ),
+              "validator" : "[A-Za-z#\-_,]+"
             } ),
         "current_location" : (
             "Studio Location",
@@ -101,11 +103,13 @@ class DBlogic( object ):
             {"choices": list( "ABCDEFGH" )} ),
         "current_stage" : (
             "Stage Number",
-            "Code number for this setup.  On Location the baseroom (+ ROM Volume) is usually 1.",
+            "Code number for this setup.  On Location the baseroom (+ ROM Volume) is usually 1.  If you don't know, ask someone who does.",
             "int",
             1,
-            { "min" : 1,
-              "max" : 10
+            { "min"       :   1,
+              "max"       :  10,
+              "load_cast" : int,
+              "save_cast" : str,
             } ),
     }
     
@@ -276,7 +280,7 @@ class DayBuild( QtGui.QMainWindow ):
     def _clientChangeCB( self ):
         # Hack to dodge Recursion error
         self._clients_combo.currentIndexChanged.disconnect()
-        # /hack
+        # hack
         self.client_idx = self._clients_combo.currentIndex()
         self.logic.current_client = self._clients_combo.itemText( self.client_idx )
         self.project_idx = 0

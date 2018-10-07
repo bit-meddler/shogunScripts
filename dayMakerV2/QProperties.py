@@ -1,7 +1,7 @@
 # Experimental, Self configuring properties.
 # UI based on 'Type' and a dict of 'Type-options'
 # Types: int, float, string, bool, vec3, Xchoice, Mchoice
-# Type Options: min, max, step_lo, step_mid, step_hi, validator, read_cast, write_cast, choices, preview*
+# Type Options: min, max, step_lo, step_mid, step_hi, validator, load_cast, save_cast, recev_cast, emit-cast. choices, preview*
 #   *preview : a display of the result of user's changes to a setting.  I'm thinking Regexs.
 # read/write casting, unified access, Maya-Like dragging could be acheved with custome Widgets
 # = { "key" : ( "Label", "ToolTip Text", "Type", "Default", {"Type-Options":None} ) } # no opts should be None
@@ -18,12 +18,15 @@ class PIntWidget( QtGui.QSpinBox ):
         # TODO: Interactive Events
         # Draggable like Maya: [Shift] + [MMB-Drag] = lo step, [MMB-Drag] = mid, [Ctrl] + [MMB-Drag] = Hi
         # Also [Ctrl] + [LMB-Click] resets to default.
-        self.step_lo = 1
+        self.step_lo  = 1
         self.step_mid = 5
-        self.step_hi = 10
+        self.step_hi  = 10
         # adapt for special use
-        self.read_cast = None
-        self.write_cast = None
+        self.recv_cast = None
+        self.emit_cast = None
+        self.load_cast = None
+        self.save_cast = None
+        
         if( not opts is None ):
             # take the opts
             for k, v in opts.iteritems():
@@ -31,16 +34,16 @@ class PIntWidget( QtGui.QSpinBox ):
         self.setRange( self.min, self.max )
         
     def getPValue( self ):
-        if( self.write_cast is None ):
+        if( self.emit_cast is None ):
             return self.value()
         else:
-            return self.write_cast( self.value() )
+            return self.emit_cast( self.value() )
             
     def setPValue( self, val ):
-        if( self.read_cast is None ):
+        if( self.recv_cast is None ):
             self.setValue( val )
         else:
-            self.setValue( self.read_cast( val ) )
+            self.setValue( self.recv_cast( val ) )
 
 
 class PStringWidget( QtGui.QLineEdit ):
@@ -51,8 +54,11 @@ class PStringWidget( QtGui.QLineEdit ):
         # validator
         self.validator = None
         # adapt for special use
-        self.read_cast = None
-        self.write_cast = None
+        self.recv_cast = None
+        self.emit_cast = None
+        self.load_cast = None
+        self.save_cast = None
+        
         if( not opts is None ):
             # take the opts
             for k, v in opts.iteritems():
@@ -62,16 +68,16 @@ class PStringWidget( QtGui.QLineEdit ):
             self.setValidator( val )
             
     def getPValue( self ):
-        if( self.write_cast is None ):
+        if( self.emit_cast is None ):
             return self.text()
         else:
-            return self.write_cast( self.text() )
+            return self.emit_cast( self.text() )
             
     def setPValue( self, val ):
-        if( self.read_cast is None ):
+        if( self.recv_cast is None ):
             self.setText( val )
         else:
-            self.setText( self.read_cast( val ) )
+            self.setText( self.recv_cast( val ) )
     
     
 class PXChoiceWidget( QtGui.QComboBox ):
@@ -81,8 +87,11 @@ class PXChoiceWidget( QtGui.QComboBox ):
         # choice list
         self.choices = []
         # adapt for special use
-        self.read_cast = None
-        self.write_cast = None
+        self.recv_cast = None
+        self.emit_cast = None
+        self.load_cast = None
+        self.save_cast = None
+        
         if( not opts is None ):
             # take the opts
             for k, v in opts.iteritems():
@@ -95,16 +104,16 @@ class PXChoiceWidget( QtGui.QComboBox ):
                 
     def getPValue( self ):
         idx = self.currentIndex()
-        if( self.write_cast is None ):
+        if( self.emit_cast is None ):
             return self.itemText( idx )
         else:
-            return self.write_cast( self.itemText( idx ) )
+            return self.emit_cast( self.itemText( idx ) )
             
     def setPValue( self, val ):
-        if( self.read_cast is None ):
+        if( self.recv_cast is None ):
             idx = self.findText( val )
         else:
-            idx = self.findText( self.read_cast( val ) )
+            idx = self.findText( self.recv_cast( val ) )
         if( idx < 0 ):
             idx = 0
         self.setCurrentIndex( idx )
