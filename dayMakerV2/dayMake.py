@@ -6,7 +6,7 @@ import ConfigParser
 import platform
 
 import enfTool
-
+from QProperties import PPopUp
 
 def _passThru( x ):
     return x
@@ -19,7 +19,8 @@ class DBlogic( object ):
                       "day_format", "datecode_format", "day_validation" )
     _PRJ_ATTERS   = ( "current_location", "current_stage", "day_format",
                       "datecode_format", "last_desc", "_sessions" )
-    _SYS_ATTERS   = ( "vicon_root", "day_format", "datecode_format", "day_validation" )
+    _SYS_ATTERS   = ( "vicon_root", "_sessions",
+                      "day_format", "datecode_format", "day_validation" )
     _DEFAULTS     = {
         "vicon_root"      : "C:\\ViconDB\\",
         "current_client"  : "Framestore",
@@ -59,34 +60,53 @@ class DBlogic( object ):
     
     _PROPERTIES = {
         #"key" : ( "Label", "ToolTip Text", "Type", "Default", {"Type-Options":None} )
-        "vicon_root" : ( "Vicon Root",
-                         "Path to the location of the Vicon Database.",
-                         "string",
-                         "C:\\ViconDB\\",
-                         {} ),
-        "datecode_format" : ( "Date Code Format",
-                         "Format of Date code, like timesfmt. %y, %m, %d are zero padded.",
-                         "string",
-                         "%y%m%d",
-                         {"validator":"[A-Za-z%]+"} ),
-        "day_format" : ( "Capture Day Format",
-                         "Format of 'capture day' string.  This is a python format block using {}'s to enclose keys.  Currently supported keys are: daycode, location, stage, dayname, and suffix.",
-                         "string",
-                         "{daycode}_{location}{stage}_{dayname}{suffix:0>2}",
-                         {} ), # TODO: Elaborate validator
-        "day_validation" : ( "Day Validation RegEx",
-                         "A RegEx to Validate allowable capture day names.",
-                         "string",
-                         "[A-Za-z0-9_]+",
-                         {} ),
-        "_sessions" : ( "Sessions",
-                         "Comma Separated list of Sessions a Capture day  typically requires",
-                         "string",
-                         ( "CAL", "ROM", "AM", "PM" ),
-                         {  "write_cast" : lambda x: tuple( x.split( "," ) ),
-                            "read_cast"  : lambda x: ",".join( x )
-                         } ),
-                         
+        "vicon_root" : (
+            "Vicon Root",
+            "Path to the location of the Vicon Database.",
+            "string",
+            "C:\\ViconDB\\",
+             None ),
+        "datecode_format" : (
+            "Date Code Format",
+            "Format of Date code, like timesfmt. %y, %m, %d are zero padded.",
+            "string",
+            "%y%m%d",
+            {"validator":"[A-Za-z%]+"} ),
+        "day_format" : (
+            "Capture Day Format",
+             "Format of 'capture day' string.  This is a python format block using {}'s to enclose keys.  Currently supported keys are: daycode, location, stage, dayname, and suffix.",
+             "string",
+             "{daycode}_{location}{stage}_{dayname}{suffix:0>2}",
+              None ), # TODO: Elaborate validator
+        "day_validation" : (
+            "Day Validation RegEx",
+            "A RegEx to Validate allowable capture day names.",
+            "string",
+            "[A-Za-z0-9_]+",
+             None ),
+        "_sessions" : (
+            "Sessions",
+            "Comma Separated list of Sessions a Capture day typically requires",
+            "string",
+            ( "CAL", "ROM", "AM", "PM" ),
+            { "write_cast" : lambda x: tuple( x.split( "," ) ),
+              "read_cast"  : lambda x: ",".join( x ),
+              "validator"  : "[A-Za-z#\-_,]+"
+            } ),
+        "current_location" : (
+            "Studio Location",
+            "Location Code for the studio.  Ealing is usually 'A', others are alocated in sequence.  If you don't know, ask someone who does.",
+            "Xchoice",
+            "A",
+            {"choices": list( "ABCDEFGH" )} ),
+        "current_stage" : (
+            "Stage Number",
+            "Code number for this setup.  On Location the baseroom (+ ROM Volume) is usually 1.",
+            "int",
+            1,
+            { "min" : 1,
+              "max" : 10
+            } ),
     }
     
     def __init__( self, clean_start=False ):
@@ -189,117 +209,8 @@ class DBlogic( object ):
             print( "enfTool -createSession -prj '{}' -day '{}' -ses '{}'".format( prj_path, day_code, session ) )
         self._saveProjectSettings()
 
-
-class PropPane( QtGui.QWidget ):
-    # Experimental, Self configuring properties.
-    # UI based on 'Type' and a dict of 'Type-options'
-    # Types: int, float, string, bool, vec3, Xchoice, Mchoice
-    # Type Options: min, max, step_lo, step_mid, step_hi, validator, read_cast, write_cast, preview*
-    #   *preview : a display of the result of user's changes to a setting.  I'm thinking Regexs.
-    # read/write casting, unified acces, Maya-Like dragging could be acheved with custome Widgets
-    # = { "key" : ( "Label", "ToolTip Text", "Type", "Default", {"Type-Options":None} ) }
-    def __init__( self, parent_app, prop_dict, properties, title ):
-        super( PropPane, self ).__init__()
-        self._parent_app = parent_app
-        self._pd_ref = prop_dict
-        self._properties = properties
-        self._register = {}
-        # Prep UI
-        self.setWindowTitle( title )
-        # TODO: Should I explicity add a scroll-bar?
-        tmp_grid = QtGui.QGridLayout()
-        # Properties, Assemble!
-        row = 0
-        for key in self._properties:
-            if( not key in self._pd_ref ):
-                continue
-            lbl, tip, p_type, default, opts = self._pd_ref[ key ]
-            # Label
-            anon = QtGui.QLabel( lbl, self )
-            tmp_grid.addWidget( anon, row, 0, 1, 1 )
-            # input cases
-            anon = None
-            if( p_type is None ):
-                continue
-            elif( p_type == "string" ):
-                anon = QtGui.QLineEdit( self )
-                # default
-                txt = ""
-                if( "read_cast" in opts ):
-                    txt = opts[ "read_cast" ]( default )
-                else:
-                    txt = default
-                # validation
-                anon.setText( txt )
-                if( "validator" in opts ):
-                    val = QtGui.QRegExpValidator( QtCore.QRegExp( opts[ "validator" ] ) )
-                    anon.setValidator( val )
-            # done switching
-            anon.setToolTip( tip )
-            tmp_grid.addWidget( anon, row, 1, 1, 1 )
-            self._register[ key ] = anon
-            row += 1
-        # Finalize
-        self.setLayout( tmp_grid )
         
-    def _publish( self ):
-        # TODO: read_cast
-        ret = {}
-        for prop in self._properties:
-            if( not prop in self._register ):
-                continue
-            ret[ prop ] = self._register[ prop ].value() # Yes, I'll need to make my own Widgets.
-        return ret
-        
-    
 class DayBuild( QtGui.QMainWindow ):
-
-    class DBPrjSettings( QtGui.QDialog ):
-
-        def __init__( self, parent_app, update_func ):
-            super( DayBuild.DBPrjSettings, self ).__init__()
-            self._parent_app  = parent_app
-            self._update_func = update_func
-            self._pw = None
-            self.title = None
-            
-        def setProps( self, prop_dict, properties, title ):
-            self._pw = PropPane( self._parent_app, prop_dict, properties, title )
-            self.title = title
-            self._buildUI()
-            
-        def _buildUI( self ):
-            if( self._pw is None ):
-                return
-            # Layout UI
-            self.setModal( True )
-            self.setWindowTitle( self.title )
-            vbox = QtGui.QVBoxLayout()
-            hbox = QtGui.QHBoxLayout()
-            
-            vbox.addWidget( self._pw )
-        
-            apply_but  = QtGui.QPushButton( "Apply and Save" )
-            cancel_but = QtGui.QPushButton( "Cancel" )
-            hbox.addStretch( 1 )
-            hbox.addWidget( apply_but )
-            hbox.addWidget( cancel_but )
-            
-            vbox.addStretch( 1 )
-            vbox.addLayout( hbox )
-            
-            self.setLayout( vbox )
-            
-            # Hookup Events
-            apply_but.clicked.connect( self._apply )
-            cancel_but.clicked.connect( self.close )
-            
-        def _apply( self ):
-            #update self._logic_ref with self._pw.properties
-            vals = self._pw._publish()
-            self._update_func( vals )
-            self.close()
-            
 
     def __init__( self, parent_app, clean_start=False ):
         super( DayBuild, self ).__init__()
@@ -387,17 +298,17 @@ class DayBuild( QtGui.QMainWindow ):
     
     def _launchPrjSettings( self ):
         print( "Project Settings" )
-        self._prjPopup = self.DBPrjSettings( self._parent_app, self.logic.acceptDict )
+        self._prjPopup = PPopUp( self._parent_app, self.logic.acceptDict )
         self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._PRJ_ATTERS, "Project Settings" )
         self._prjPopup.show()
-        self.logic._saveProjectSettings()
+        # TODO: Callback for completing the popup
         
     def _launchSysSettings( self ):
         print( "System Settings" )
-        self._prjPopup = self.DBPrjSettings( self._parent_app, self.logic.acceptDict )
+        self._prjPopup = PPopUp( self._parent_app, self.logic.acceptDict )
         self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._SYS_ATTERS, "System Settings" )
         self._prjPopup.show()
-        self.logic._saveAppCfg()
+        # TODO: Callback for completing the popup
 
     def _buildUI( self ):
         self.setWindowTitle( "Make my Day - V2.0.1" )
