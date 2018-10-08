@@ -165,9 +165,10 @@ class PXChoiceWidget( QtGui.QComboBox ):
         
 class PPane( QtGui.QWidget ):
 
-    def __init__( self, parent_app, prop_dict, properties, title ):
+    def __init__( self, parent_app, obj, prop_dict, properties, title ):
         super( PPane, self ).__init__()
         self._parent_app = parent_app
+        self._obj_ref = obj
         self._pd_ref = prop_dict
         self._properties = properties
         self._register = {}
@@ -190,16 +191,16 @@ class PPane( QtGui.QWidget ):
                 continue
             elif( p_type == "string" ):
                 anon = PStringWidget( self, default, opts )
-                anon.setPValue( default )
+                anon.setPValue( getattr( self._obj_ref, key ) )
             elif( p_type == "int" ):
                 anon = PIntWidget( self, default, opts )
-                anon.setPValue( default )
+                anon.setPValue( getattr( self._obj_ref, key ) )
             elif( p_type == "float" ):
                 anon = PFloatWidget( self, default, opts )
-                anon.setPValue( default )
+                anon.setPValue( getattr( self._obj_ref, key ) )
             elif( p_type == "Xchoice" ):
                 anon = PXChoiceWidget( self, default, opts )
-                anon.setPValue( default )
+                anon.setPValue( getattr( self._obj_ref, key ) )
             # done switching
             # Sanity Check
             if( anon is None ):
@@ -222,15 +223,16 @@ class PPane( QtGui.QWidget ):
 
 class PPopUp( QtGui.QDialog ):
 
-    def __init__( self, parent_app, update_func ):
+    def __init__( self, parent_app, obj, update_func ):
         super( PPopUp, self ).__init__()
         self._parent_app  = parent_app
+        self._obj_ref     = obj
         self._update_func = update_func
         self._pw = None
         self.title = None
         
     def setProps( self, prop_dict, properties, title ):
-        self._pw = PPane( self._parent_app, prop_dict, properties, title )
+        self._pw = PPane( self._parent_app, self._obj_ref, prop_dict, properties, title )
         self.title = title
         self._buildUI()
         
@@ -263,7 +265,6 @@ class PPopUp( QtGui.QDialog ):
     def _apply( self ):
         #update self._logic_ref with self._pw.properties
         vals = self._pw._publish()
-        print vals
         self._update_func( vals )
         self.close()
         
@@ -346,7 +347,10 @@ if( __name__ == "__main__" ):
             } ],
     }
     prop_order = [ 't_x', 't_y', 't_z', 'r_x', 'r_y', 'r_z', 's_x', 's_y', 's_z' ]
+    X = object()
+    for attr in prop_order:
+        setattr( X, attr, 1 )
     app = QtGui.QApplication( sys.argv )
-    pp = PPane( app, props, prop_order, "Test" )
+    pp = PPane( app, X, props, prop_order, "Test" )
     pp.show()
     sys.exit( app.exec_() )

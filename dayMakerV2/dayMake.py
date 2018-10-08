@@ -21,45 +21,7 @@ class DBlogic( object ):
                       "datecode_format", "last_desc", "_sessions" )
     _SYS_ATTERS   = ( "vicon_root", "_sessions",
                       "day_format", "datecode_format", "day_validation" )
-    _DEFAULTS     = {
-        "vicon_root"      : "C:\\ViconDB\\",
-        "current_client"  : "Framestore",
-        "current_project" : "Gravity",
-        "day_format"      : "{daycode}_{location}{stage}_{dayname}_{suffix:0>2}",
-        "datecode_format" : "%y%m%d",
-        "day_validation"  : "[A-Za-z0-9_]+",
-        "_sessions"       : ( "CAL", "ROM", "AM", "PM" ),
-        "current_location": "A",
-        "current_stage"   : 1,
-        "last_desc"       : "CaptureDay",
-    }
-    _READ_CASTS   = {
-        "vicon_root"      : _passThru,
-        "current_client"  : _passThru,
-        "current_project" : _passThru,
-        "day_format"      : _passThru,
-        "datecode_format" : _passThru,
-        "day_validation"  : _passThru,
-        "_sessions"       : lambda x: tuple( x.split( "," ) ),
-        "current_location": _passThru,
-        "current_stage"   : int,
-        "last_desc"       : _passThru,
-    }
-    _WRITE_CASTS  = {
-        "vicon_root"      : _passThru,
-        "current_client"  : _passThru,
-        "current_project" : _passThru,
-        "day_format"      : _passThru,
-        "datecode_format" : _passThru,
-        "day_validation"  : _passThru,
-        "_sessions"       : lambda x: ",".join( x ),
-        "current_location": _passThru,
-        "current_stage"   : str,
-        "last_desc"       : _passThru,
-    }
-    
-    _PROPERTIES = {
-        #"key" : ( "Label", "ToolTip Text", "Type", "Default", {"Type-Options":None} )
+    _PROPERTIES   = {
         "vicon_root" : (
             "Vicon Root",
             "Path to the location of the Vicon Database.",
@@ -113,10 +75,11 @@ class DBlogic( object ):
             } ),
     }
     
-    def __init__( self, clean_start=False ):
+    def __init__( self, ui, clean_start=False ):
         super( DBlogic, self ).__init__()
         self._local_data = os.getenv( "LOCALAPPDATA" )# Multiplatform?
         self._config = ConfigParser.RawConfigParser()
+        self._ui_ref = ui
         self._config.add_section( self._CFG_SECTION )
         self._cfg_fqp = os.path.join( self._local_data, self._CFG_FILENAME )
         self.clean_start  = clean_start # TODO: don't load cfg
@@ -140,21 +103,37 @@ class DBlogic( object ):
         for k, v in update.iteritems():
             setattr( self, k, v )
             
+    def acceptDictUI( self, update ):
+        self.acceptDict( update )
+        # request UI refreash
+        self._initDate()
+        self._ui_ref._setStage()
+        self._ui_ref._dayUpdate()
+            
     def _genericConfLoader( self, parser, path, keys, section ):
         update = {}
         if( os.path.isfile( path ) ):
             parser.read( path )            
             for attr in keys:
+                default, opts = None, None
+                if( attr in self._PROPERTIES ):
+                    default, opts = self._PROPERTIES[ attr ][3], self._PROPERTIES[ attr ][4]
                 try:
-                    val = self._READ_CASTS[ attr ]( parser.get( section, attr ) )
+                    val = parser.get( section, attr )
                 except ConfigParser.NoOptionError:
-                    val = self._DEFAULTS[ attr ]
+                    val = default
+                if( not opts is None ):
+                    if( "load_cast" in opts ):
+                        val = opts[ "load_cast" ]( val )
                 update[ attr ] = val
         else:
             # Load Defaults
             print( "Loading Defaults" )
             for attr in keys:
-                update[ attr ] = self._DEFAULTS[ attr ]
+                default = ""
+                if( attr in self._PROPERTIES ):
+                    default = self._PROPERTIES[ attr ][3]
+                update[ attr ] = default
         # execute
         self.acceptDict( update )
         
@@ -163,7 +142,18 @@ class DBlogic( object ):
         if( not parser.has_section( section ) ):
             parser.add_section( section )
         for attr in keys:
-            parser.set( section, attr, self._WRITE_CASTS[attr]( getattr( self, attr ) ) )
+            opts = None
+            if( attr in self._PROPERTIES ):
+                opts = self._PROPERTIES[ attr ][4]
+            if( not opts is None ):
+                # has opts
+                if( "save_cast" in opts ):
+                    cast = opts[ "save_cast" ]
+                    parser.set( section, attr, cast( getattr( self, attr ) ) )
+                    continue
+            # fall through is no cast or opts        
+            parser.set( section, attr, getattr( self, attr ) )
+                
         if( not os.path.isfile( path ) ):
             os.mkdir( os.path.dirname( path ) )
         fh = open( path, "w" )
@@ -220,7 +210,7 @@ class DayBuild( QtGui.QMainWindow ):
         super( DayBuild, self ).__init__()
         self._parent_app = parent_app
         # Initiate Logic - Load Sys
-        self.logic = DBlogic()
+        self.logic = DBlogic( self )
         # run once??
         try:
             self.client_idx = self.logic.client_list.index( self.logic.current_client )
@@ -273,6 +263,9 @@ class DayBuild( QtGui.QMainWindow ):
         # get selected project
         self._project_lock.setCheckState( QtCore.Qt.Checked )
         
+    def _dayUpdate( self ):
+        self._date_code.setText( self.logic.datecode )
+        
     def _dateLockCB( self ):
         lock = not self._date_lock.isChecked()
         self._date_code.setReadOnly( lock )
@@ -302,18 +295,24 @@ class DayBuild( QtGui.QMainWindow ):
     
     def _launchPrjSettings( self ):
         print( "Project Settings" )
-        self._prjPopup = PPopUp( self._parent_app, self.logic.acceptDict )
+        self._prjPopup = PPopUp( self._parent_app, self.logic, self._savePrj )
         self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._PRJ_ATTERS, "Project Settings" )
         self._prjPopup.show()
-        # TODO: Callback for completing the popup
         
     def _launchSysSettings( self ):
         print( "System Settings" )
-        self._prjPopup = PPopUp( self._parent_app, self.logic.acceptDict )
+        self._prjPopup = PPopUp( self._parent_app, self.logic, self._saveSys )
         self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._SYS_ATTERS, "System Settings" )
         self._prjPopup.show()
-        # TODO: Callback for completing the popup
-
+        
+    def _savePrj( self, update ):
+        self.logic.acceptDictUI( update )
+        self.logic._saveProjectSettings()
+        
+    def _saveSys( self, update ):
+        self.logic.acceptDictUI( update )
+        self.logic._saveAppCfg()
+        
     def _buildUI( self ):
         self.setWindowTitle( "Make my Day - V2.0.1" )
         boxWidth = 100
@@ -366,7 +365,7 @@ class DayBuild( QtGui.QMainWindow ):
         anon = QtGui.QLabel( "Datecode", self )
         tmp_cd_grid.addWidget( anon, 0, 0, 1, 1 )
         
-        self._date_code = QtGui.QLineEdit( self.logic.datecode, self )
+        self._date_code = QtGui.QLineEdit( "", self )
         self._date_code.setMaximumWidth( 75 )
         self._date_code.setReadOnly( True )
         tmp_cd_grid.addWidget( self._date_code, 1, 0, 1, 1 )
@@ -443,6 +442,7 @@ class DayBuild( QtGui.QMainWindow ):
         self._projectLockCB()
         self._setStage()
         self._stageCB()
+        self._dayUpdate()
         
         # attach CBs
         self._choose.clicked.connect( self._chooseCP )
