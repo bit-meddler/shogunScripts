@@ -5,6 +5,16 @@
 #   *preview : a display of the result of user's changes to a setting.  I'm thinking Regexs.
 # read/write casting, unified access, Maya-Like dragging could be acheved with custome Widgets
 # = { "key" : ( "Label", "ToolTip Text", "Type", "Default", {"Type-Options":None} ) } # no opts should be None
+
+# Maya widget states to emulate: 'Has Keys', 'Key Frame', 'Locked', 'Ready'
+# https://knowledge.autodesk.com/support/maya/downloads/caas/CloudHelp/cloudhelp/2017/ENU/Maya/files/GUID-4C954FB2-8B6A-4BBD-9695-DF432616D0D2-htm.html#GUID-4C954FB2-8B6A-4BBD-9695-DF432616D0D2__WS17956D7ADBC6E736-4CE538CA117AE30C631-7FF9
+#
+# Maya Attribute changes to copy
+# https://knowledge.autodesk.com/support/maya/downloads/caas/CloudHelp/cloudhelp/2017/ENU/Maya/files/GUID-6F862011-4578-40A0-9902-786CA2A44AE5-htm.html
+# [Return]: Lose Focus, [Enter] Keep Focus.
+# Draggable Delta: [Shift] + [MMB-Drag] = lo step, [MMB-Drag] = mid, [Ctrl] + [MMB-Drag] = Hi
+# Also [Ctrl] + [LMB-Click] resets to default.
+
 from PySide import QtGui, QtCore
 
 
@@ -15,9 +25,6 @@ class PIntWidget( QtGui.QSpinBox ):
         self.default = default
         self.min = 0
         self.max = 99
-        # TODO: Interactive Events
-        # Draggable like Maya: [Shift] + [MMB-Drag] = lo step, [MMB-Drag] = mid, [Ctrl] + [MMB-Drag] = Hi
-        # Also [Ctrl] + [LMB-Click] resets to default.
         self.step_lo  = 1
         self.step_mid = 5
         self.step_hi  = 10
@@ -44,6 +51,43 @@ class PIntWidget( QtGui.QSpinBox ):
             self.setValue( val )
         else:
             self.setValue( self.recv_cast( val ) )
+
+
+class PFloatWidget( QtGui.QLineEdit ):
+
+    def __init__( self, parent_app, default, opts=None ):
+        super( PFloatWidget, self ).__init__( parent_app )
+        self.default = default
+        self.min = -1e-99
+        self.max = 1e99
+        self.step_lo  = 1
+        self.step_mid = 10
+        self.step_hi  = 1000
+        # adapt for special use
+        self.recv_cast = None
+        self.emit_cast = None
+        self.load_cast = None
+        self.save_cast = None
+        
+        if( not opts is None ):
+            # take the opts
+            for k, v in opts.iteritems():
+                setattr( self, k, v )
+        #self.setRange( self.min, self.max )
+        
+    def getPValue( self ):
+        fVal = float( self.text() )
+        if( self.emit_cast is None ):
+            return float( fVal )
+        else:
+            return self.emit_cast( fVal )
+            
+    def setPValue( self, val ):
+        sVal = str( val )
+        if( self.recv_cast is None ):
+            self.setText( sVal )
+        else:
+            self.setText( self.recv_cast( sVal ) )
 
 
 class PStringWidget( QtGui.QLineEdit ):
@@ -150,6 +194,9 @@ class PPane( QtGui.QWidget ):
             elif( p_type == "int" ):
                 anon = PIntWidget( self, default, opts )
                 anon.setPValue( default )
+            elif( p_type == "float" ):
+                anon = PFloatWidget( self, default, opts )
+                anon.setPValue( default )
             elif( p_type == "Xchoice" ):
                 anon = PXChoiceWidget( self, default, opts )
                 anon.setPValue( default )
@@ -220,3 +267,86 @@ class PPopUp( QtGui.QDialog ):
         self._update_func( vals )
         self.close()
         
+        
+if( __name__ == "__main__" ):
+    # Test Props, imitating a Maya Channel Editor.
+    import sys
+    props = {
+        "t_x" : [
+            "Translate X",
+            "",
+            "float",
+            1,
+            { "min" :  1,
+              "max" : 10,
+            } ],
+        "t_y" : [
+            "Translate Y",
+            "",
+            "float",
+            1,
+            { "min" :  1,
+              "max" : 10,
+            } ],
+        "t_z" : [
+            "Translate Z",
+            "",
+            "float",
+            1,
+            { "min" :  1,
+              "max" : 10,
+            } ],
+         "r_x" : [
+            "Rotate X",
+            "",
+            "int",
+            1,
+            { "min" :  1,
+              "max" : 10,
+            } ],
+        "r_y" : [
+            "Rotate Y",
+            "",
+            "int",
+            1,
+            { "min" :  1,
+              "max" : 10,
+            } ],
+        "r_z" : [
+            "Rotate Z",
+            "",
+            "int",
+            1,
+            { "min" :  1,
+              "max" : 10,
+            } ],
+        "s_x" : [
+            "Scale X",
+            "",
+            "int",
+            1,
+            { "min" :  1,
+              "max" : 10,
+            } ],
+        "s_y" : [
+            "Scale Y",
+            "",
+            "int",
+            1,
+            { "min" :  1,
+              "max" : 10,
+            } ],
+        "s_z" : [
+            "Scale Z",
+            "",
+            "int",
+            1,
+            { "min" :  1,
+              "max" : 10,
+            } ],
+    }
+    prop_order = [ 't_x', 't_y', 't_z', 'r_x', 'r_y', 'r_z', 's_x', 's_y', 's_z' ]
+    app = QtGui.QApplication( sys.argv )
+    pp = PPane( app, props, prop_order, "Test" )
+    pp.show()
+    sys.exit( app.exec_() )
