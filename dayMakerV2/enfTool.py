@@ -11,7 +11,12 @@ from glob import glob
 
 
 _MATCH_LAST_DIGITS = re.compile( '.*?([0-9]+)$', re.I )
+DEFAULT_GLOBALS_DIR = "000000_globals"
 
+def mkdirs( path ):
+    if( not os.path.isfile( path ) ):
+        os.mkdir( os.path.dirname( path ) )
+            
 def _absENFscan( path, error, search=None ):
     if not os.path.isdir( path ):
         print( error )
@@ -59,19 +64,76 @@ def getProjectSettings( path ):
     res = _absENFscan( path, error, search )
     if( len( res ) != 1 ):
         print( "Error! no globals found")
-        global_folder = "000000_globals"
+        global_folder = DEFAULT_GLOBALS_DIR
     else:
         global_folder = res[0]
     return os.path.join( path, global_folder, "settings.ini" )
 
+def _makeENF( type, name, root_path ):
+    ses_info = False
+    reference = ""
+    parent = ""
+    has_child = ""
+    tag = ""
+
+    if( type == "PROJECT" ): 
+        reference = ""
+        parent = ""
+        has_child = "FALSE"
+        ses_info = True
+        tag = "Project 1"
+    elif( type == "CAPTURE_DAY" ): 	
+        reference = ""
+        parent = "Project 1"
+        has_child = "FALSE"
+        ses_info = False
+        tag = "Capture day 1"
+    elif( type == "SESSION" ): 
+        reference = ""
+        parent = "Capture day 1"
+        has_child = "FALSE"
+        ses_info = True
+        tag = "Session 1"
+
+    if( ses_info ):
+        creation_datetime = datetime.datetime.now().strftime( "%Y,%m,%d,%H,%M,%S" )
+
+    # mkdir
+    folder = os.path.join( root_path, name )
+    os.mkdir( folder )
+    
+    # assemble ini file
+    config = ConfigParser.RawConfigParser()
+    # node info
+    section = "Node Information"
+    config.add_section( section )
+    config.set( section, "TYPE", type )
+    config.set( section, "REFERENCE", reference )
+    config.set( section, "PARENT", parent )
+    config.set( section, "NAME", name )
+    config.set( section, "HASCHILD", has_child )
+    # session Info when needed
+    if( ses_info ):
+        section = "SESSION_INFO"
+        config.add_section( section )
+        config.set( section, "CREATIONDATEANDTIME", creation_datetime )
+        
+    # Output
+    enfPath = os.path.join( folder, (name + "." + tag + ".enf") )
+    fh = open( enfPath, "w" )
+    config.write( fh )
+    fh.close()
+
 def createProject( path, prj ):
-    pass
+    _makeENF( "PROJECT", prj, path )
+    # make globals
+    mkdirs( os.path.join( path, DEFAULT_GLOBALS_DIR ) )
     
 def createDay( path, day ):
-    pass
+    _makeENF( "CAPTURE_DAY", day, path )
     
 def createSession( path, ses ):
-    pass
+    _makeENF( "SESSION", ses, path )
     
     
 if __name__ == "__main__":

@@ -8,8 +8,6 @@ import platform
 import enfTool
 from QProperties import PPopUp
 
-def _passThru( x ):
-    return x
 
 class DBlogic( object ):
     _CFG_FILENAME =   "dayBuild.cfg"
@@ -17,9 +15,9 @@ class DBlogic( object ):
     _PRJ_SECTION  =   "DAYSETTINGS"
     _SAVED_ATTERS = ( "vicon_root", "current_client", "current_project",
                       "day_format", "datecode_format", "day_validation" )
-    _PRJ_ATTERS   = ( "current_location", "current_stage", "day_format",
+    _PRJ_ATTERS   = ( "system_fps", "current_location", "current_stage", "day_format",
                       "datecode_format", "last_desc", "_sessions" )
-    _SYS_ATTERS   = ( "vicon_root", "_sessions",
+    _SYS_ATTERS   = ( "vicon_root", "system_fps", "_sessions",
                       "day_format", "datecode_format", "day_validation" )
     _PROPERTIES   = {
         "vicon_root" : (
@@ -63,6 +61,17 @@ class DBlogic( object ):
             "Xchoice",
             "A",
             {"choices": list( "ABCDEFGH" )} ),
+        "system_fps" : (
+            "Framerate",
+            "Project Frame rate",
+            "Xchoice",
+            "119.88",
+            { "choices"   : [ "100", "119.88", "125", "149.85", "150" ],
+              "emit_cast" : float,
+              "recv_cast" : str,
+              "load_cast" : float,
+              "save_cast" : str,
+            } ),
         "current_stage" : (
             "Stage Number",
             "Code number for this setup.  On Location the baseroom (+ ROM Volume) is usually 1.  If you don't know, ask someone who does.",
@@ -154,8 +163,7 @@ class DBlogic( object ):
             # fall through is no cast or opts        
             parser.set( section, attr, getattr( self, attr ) )
                 
-        if( not os.path.isfile( path ) ):
-            os.mkdir( os.path.dirname( path ) )
+        enfTool.mkdirs( path )
         fh = open( path, "w" )
         parser.write( fh )
         fh.close()
@@ -198,11 +206,23 @@ class DBlogic( object ):
             "suffix"  : suffix
         }
         day_code = self.day_format.format( **meta_data )
-        print( "enfTool -createDay -prj '{}' -day '{}'".format( prj_path, day_code ) )
+        #print( "enfTool -createDay -path '{}' -day '{}'".format( prj_path, day_code ) )
+        enfTool.createDay( prj_path, day_code )
+        
+        day_path = os.path.join( prj_path, day_code )
         for session in self._sessions:
-            print( "enfTool -createSession -prj '{}' -day '{}' -ses '{}'".format( prj_path, day_code, session ) )
+            #print( "enfTool -createSession -path '{}' -ses '{}'".format( day_path, session ) )
+            enfTool.createSession( day_path, session )
         self._saveProjectSettings()
+        # publish to Henchman?
 
+    def newProject( self, name ):
+        print( "enfTool -createProject -path '{}' -prj '{}'".format( self.vicon_root, name ) )
+        self._updateProjectList()
+        self._ui_ref.project_idx = self.project_list.index( name )
+        self._ui_ref._updateCpUi()
+        self._ui_ref._updatePath()
+        
         
 class DayBuild( QtGui.QMainWindow ):
 
@@ -294,16 +314,19 @@ class DayBuild( QtGui.QMainWindow ):
         self.logic.current_stage = self._stage.value()
     
     def _launchPrjSettings( self ):
-        print( "Project Settings" )
+        #print( "Project Settings" )
         self._prjPopup = PPopUp( self._parent_app, self.logic, self._savePrj )
         self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._PRJ_ATTERS, "Project Settings" )
         self._prjPopup.show()
         
     def _launchSysSettings( self ):
-        print( "System Settings" )
+        #print( "System Settings" )
         self._prjPopup = PPopUp( self._parent_app, self.logic, self._saveSys )
         self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._SYS_ATTERS, "System Settings" )
         self._prjPopup.show()
+        
+    def _launchNewProject( self ):
+        self.logic.newProject( "TEST" )
         
     def _savePrj( self, update ):
         self.logic.acceptDictUI( update )
@@ -447,6 +470,7 @@ class DayBuild( QtGui.QMainWindow ):
         # attach CBs
         self._choose.clicked.connect( self._chooseCP )
         self._generate.clicked.connect( self.generate )
+        self._new_prj.clicked.connect( self._launchNewProject )
         self._project_lock.stateChanged.connect( self._projectLockCB )
         self._date_lock.stateChanged.connect( self._dateLockCB )
         self._clients_combo.currentIndexChanged.connect( self._clientChangeCB )
