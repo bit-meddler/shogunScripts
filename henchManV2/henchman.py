@@ -34,10 +34,15 @@ class Henchman( QtGui.QMainWindow ):
         hbox = QtGui.QHBoxLayout()
         self.day_select_but = QtGui.QPushButton( "Update Day", self )
         hbox.addWidget( self.day_select_but )
-        #hbox.addStretch( 1 )
         self.day_make_but = QtGui.QPushButton( "Launch Day Tool", self )
         hbox.addWidget( self.day_make_but )
+        self.day_fresh_but = QtGui.QPushButton( "Refresh Day", self )
+        hbox.addWidget( self.day_fresh_but )
+        
+        hbox.setContentsMargins( 0, 0, 0, 0 )
+        
         anon = QtGui.QWidget()
+        anon.setContentsMargins( 0, 0, 0, 0 )
         anon.setLayout( hbox )
         grid_1.addWidget( anon, 2, 0, 1, 11 )
         
@@ -51,9 +56,11 @@ class Henchman( QtGui.QMainWindow ):
         hbox.addWidget( self.ses_am_but )
         self.ses_pm_but = QtGui.QPushButton( "PM", self )
         hbox.addWidget( self.ses_pm_but )
+        hbox.setContentsMargins( 0, 0, 0, 0 )
         
         anon = QtGui.QWidget()
         anon.setLayout( hbox )
+        anon.setContentsMargins( 0, 0, 0, 0 )
         grid_1.addWidget( anon, 3, 0, 1, 11 )
         grp_1.setLayout( grid_1 )
 
@@ -99,7 +106,7 @@ class Henchman( QtGui.QMainWindow ):
         grid_4.addWidget( anon, 0, 1, 1, 2 )
         anon = QtGui.QLabel( r"Patch Colour", self )
         grid_4.addWidget( anon, 0, 3, 1, 1 )
-        self.slate_gen_but = QtGui.QPushButton( "Generate", self )
+        self.slate_gen_but = QtGui.QPushButton( "Publish", self )
         grid_4.addWidget( self.slate_gen_but, 1, 0, 1, 1 )
         self.performer_name = QtGui.QLineEdit( "Andy Serkis", self )
         self.performer_name.setToolTip( "<First> <Last>, no initals" )
@@ -108,7 +115,7 @@ class Henchman( QtGui.QMainWindow ):
         )
         grid_4.addWidget( self.performer_name, 1, 1, 1, 2 )
         self.performer_patch = QtGui.QComboBox( self )
-        self.performer_patch.addItems( ["Red","Green","Blue","Yellow","Pink","Lime"] ) 
+        self.performer_patch.addItems( ["Red","Green","Blue","Yellow","Pink","Lime","White"] ) 
         grid_4.addWidget( self.performer_patch, 1, 3, 1, 1 )
         anon = QtGui.QLabel( r"Slate Format", self )
         grid_4.addWidget( anon, 2, 0, 1, 1 )
@@ -160,14 +167,10 @@ class Henchman( QtGui.QMainWindow ):
         
         # Setup Events ###########################################################
         # self.day_path
-        # self.date_code
-        # self.time_code
-        # self.performer_name
-        # self.performer_patch
-        # self.slate_format
         
-        # self.day_select_but
+        self.day_select_but.clicked.connect( self._selectDir )
         # self.day_make_but
+        # self.day_fresh_but
         
         self.ses_cal_but.clicked.connect( partial( self.setSession, "CAL" ) )
         self.ses_rom_but.clicked.connect( partial( self.setSession, "ROM" ) )
@@ -187,12 +190,13 @@ class Henchman( QtGui.QMainWindow ):
         self.save_floor_but.clicked.connect( partial( self._saveCal, "Floor" ) )
         self.save_bing_but.clicked.connect( partial( self._saveCal, "Survey" ) )
         
-        # self.slate_gen_but
         
         self.rom_snap_but.clicked.connect( partial( self._generateSlate, "Snap" ) )
         self.rom_body_but.clicked.connect( partial( self._generateSlate, "Body" ) )
         self.rom_face_but.clicked.connect( partial( self._generateSlate, "Face" ) )
         self.rom_prop_but.clicked.connect( partial( self._generateSlate, "Prop" ) )
+
+        self.slate_gen_but.clicked.connect( self._publish )
         
         self.slate_simp_rb.toggled.connect( self._setSlate )
         self.slate_vicon_rb.toggled.connect( self._setSlate )
@@ -204,6 +208,20 @@ class Henchman( QtGui.QMainWindow ):
         self._genTime()
         self.slate_vicon_rb.setChecked( True )
         
+    def _selectDir( self ):
+        # get last PROJECT from cfg
+        prj_path = r"C:\ViconData\WETA\EarthVsSoup"
+        selected = QtGui.QFileDialog.getExistingDirectory(
+                dir=prj_path,
+                caption="Select Capture Day",
+                options=QtGui.QFileDialog.ShowDirsOnly
+        )
+        # Sanity Check ?
+        
+        print( "selected_directory: {}'".format( selected ) )
+        # publish to cfg
+        self.day_path.setText( selected )
+    
     def _slateCal( self, mode ):
         time = self.unUck( self.time_code.text() )
         slate = "{}_{}_calibration_01".format( time[:4], mode )
@@ -222,16 +240,19 @@ class Henchman( QtGui.QMainWindow ):
         now = datetime.datetime.now()
         self.date_code.setText( now.strftime( "%y%m%d" ) )
         
-    def _genTime( self ):
+    def _timeText( self ):
         now = datetime.datetime.now()
-        self.time_code.setText( now.strftime( "%H%M%S" ) )
+        return now.strftime( "%H%M%S" )
+        
+    def _genTime( self ):
+        self.time_code.setText( self._timeText() )
         
     def setSession( self, session ):
         path = self.unUck( self.day_path.text() )
         print( "vicon -setSession '{}'".format( os.path.join( path, session ) ) )
         
     def _generateSlate( self, mode ):
-        # clean and sanity check
+        # clean and sanity check performer name
         performer = self.unUck( self.performer_name.text() )
         performer = performer.split()
         num = len( performer )
@@ -246,41 +267,50 @@ class Henchman( QtGui.QMainWindow ):
             new.append( performer[-1] )
             performer = new
             
-        if( int( self.time_code.text() ) > 120000 ):
+        # get, but don't change the time
+        if( int( self._timeText() ) > 120000 ):
             merid = "pm"
         else:
             merid = "am"
             
+        patch = self.unUck( self.performer_patch.currentText() )
+        
+        # assemble metadata
         meta = {
             "datecode": self.unUck( self.date_code.text() ),
-            "PERFORMER_first": performer[0],
+            "Performer_first": performer[0],
             "performer_first": performer[0].lower(),
-            "PERFORMER_second": performer[1],
+            "Performer_second": performer[1],
             "performer_second": performer[1].lower(),
             "Mode" : mode,
             "mode" : mode.lower(),
             "merid": merid,
             "suffix": 1,
+            "patch" : patch,
         }
         slate = self.unUck( self.slate_format.text() )
         slate = slate.format( **meta )
         self.slate_result.setText( slate )
         
+    def _publish( self ):
+        slate = self.unUck( self.slate_result.text() )
+        patch = self.unUck( self.performer_patch.currentText() )
         self.setSession( "ROM" )
         print( "vicon -setSlate '{}'".format( slate ) )
-        
+        print( "vicon -setDesc '{}'".format( patch ) )
         
     def _setSlate( self ):
         format = ""
         if( self.slate_simp_rb.isChecked() ):
-            format = "{datecode}_{PERFORMER_first}_{Mode}_{suffix:0>2}"
+            format = "{datecode}_{Performer_first}_{Mode}_{suffix:0>2}"
         elif( self.slate_vicon_rb.isChecked() ):
-            format = "{datecode}_{PERFORMER_first}{PERFORMER_second[0]}_{Mode}_ROM_{merid}_{suffix:0>2}"
+            format = "{datecode}_{Performer_first}{Performer_second[0]}_{Mode}_ROM_{merid}_{suffix:0>2}"
         elif( self.slate_giant_rb.isChecked() ):
             format = "{performer_first[0]}{performer_second[0]}{performer_second[1]}_" + \
                      "{datecode}{merid}_{performer_first}_{performer_second}_{suffix:0>2}.{mode}"
         elif( self.slate_pipe_rb.isChecked() ):
-            format = "{performer_first}_{Mode}_ROM_{suffix:0>2}"
+        
+            format = "{Performer_first}_{Mode}_ROM_{suffix:0>2}"
         self.slate_format.setText( format )
         
         
