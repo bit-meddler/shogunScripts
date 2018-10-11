@@ -6,17 +6,84 @@ import ConfigParser
 import platform
 
 import enfTool
+import utils
 from QProperties import PPopUp
 
+class ManagedProps( object ):
 
+    def __init__( self, properties ):
+        self.__properties = properties
+        
+    def acceptDict( self, update ):
+        for k, v in update.iteritems():
+            setattr( self, k, v )
+            
+    def genericConfLoader( self, path, tasks, force_defaults=False ):
+        update = {}
+        parser = ConfigParser.RawConfigParser()
+        if( os.path.isfile( path ) and (not force_defaults) ):
+            parser.read( path )
+            for section, keys in tasks:
+                for attr in keys:
+                    default, opts = None, None
+                    if( attr in self.__properties ):
+                        default, opts = self.__properties[ attr ][3], self.__properties[ attr ][4]
+                    try:
+                        val = parser.get( section, attr )
+                    except( ConfigParser.NoOptionError, ConfigParser.NoSectionError ):
+                        val = default
+                    if( not opts is None ):
+                        if( "load_cast" in opts ):
+                            val = opts[ "load_cast" ]( val )
+                    update[ attr ] = val
+        else:
+            # Load Defaults
+            if( force_defaults ):
+                print( "Ignoring '{}'.".format( os.path.basename( path ) ) )
+            else:
+                print( "Config file '{}' missing.".format( os.path.basename( path ) ) )
+            for section, keys in tasks:
+                print( "Loading defaults for [{}]".format( section ) )
+                for attr in keys:
+                    default = ""
+                    if( attr in self.__properties ):
+                        default = self.__properties[ attr ][3]
+                    update[ attr ] = default
+        # execute
+        self.acceptDict( update )
+        
+    def genericConfSaver( self, path, task ):
+        parser = ConfigParser.RawConfigParser()
+        for section, keys in tasks:
+            # safty for new cfg file
+            if( not parser.has_section( section ) ):
+                parser.add_section( section )
+            for attr in keys:
+                opts = None
+                if( attr in self.__properties ):
+                    opts = self.__properties[ attr ][4]
+                if( not opts is None ):
+                    # has opts
+                    if( "save_cast" in opts ):
+                        cast = opts[ "save_cast" ]
+                        parser.set( section, attr, cast( getattr( self, attr ) ) )
+                        continue
+                # fall through if no cast or opts        
+                parser.set( section, attr, getattr( self, attr ) )
+                
+        utils.mkdirs( path )
+        fh = open( path, "w" )
+        parser.write( fh )
+        fh.close()
+        
+        
 class DBlogic( object ):
     _CFG_FILENAME =   "dayBuild.cfg"
     _CFG_SECTION  =   "SYSTEM"
     _PRJ_SECTION  =   "DAYSETTINGS"
     _SAVED_ATTERS = ( "vicon_root", "current_client", "current_project",
                       "day_format", "datecode_format", "day_validation" )
-    _PRJ_ATTERS   = ( "system_fps", "current_location", "current_stage", "day_format",
-                      "datecode_format", "last_desc", "_sessions" )
+    _PRJ_ATTERS   = ( "system_fps", "current_location", "prj_rom_fmt", "prj_cal_session", "prj_rom_session", "current_stage", "day_format", "datecode_format", "last_desc", "_sessions" )
     _SYS_ATTERS   = ( "vicon_root", "system_fps", "_sessions",
                       "day_format", "datecode_format", "day_validation" )
     _PROPERTIES   = {
@@ -25,6 +92,24 @@ class DBlogic( object ):
             "Path to the location of the Vicon Database.",
             "string",
             "C:\\ViconDB\\",
+             None ),
+        "prj_rom_fmt" : (
+            "ROM Slate Format",
+            "Python format string of the prefered ROM slate for this project. Keys: Performer_first, Performer_second, datecode, suffix, Mode, merid.",
+            "string",
+            "{datecode}_{Performer_first}{Performer_second[0]}_{Mode}_ROM_{merid}_{suffix:0>2}",
+             None ),
+        "prj_rom_session" : (
+            "ROM Session folder",
+            "Folder that ROMs are saved into per shooting day.",
+            "string",
+            "ROM",
+             None ),
+        "prj_cal_session" : (
+            "Calibration folder",
+            "Folder that System Calibrations are saved into per shooting day.",
+            "string",
+            "CAL",
              None ),
         "datecode_format" : (
             "Date Code Format",
@@ -82,6 +167,19 @@ class DBlogic( object ):
               "load_cast" : int,
               "save_cast" : str,
             } ),
+        # Properties with no UI Hookup?
+        "current_client" : (
+            None,
+            None,
+            "string",
+            "",
+            None ),
+        "current_project" : (
+            None,
+            None,
+            "string",
+            "",
+            None ),
     }
     
     def __init__( self, ui, clean_start=False ):
@@ -137,7 +235,7 @@ class DBlogic( object ):
                 update[ attr ] = val
         else:
             # Load Defaults
-            print( "Loading Defaults" )
+            print( "Config file '{}' missing, Loading Defaults".format( os.path.basename( path ) ) )
             for attr in keys:
                 default = ""
                 if( attr in self._PROPERTIES ):
@@ -173,7 +271,8 @@ class DBlogic( object ):
         # TODO: find a placce to save out Project settings per host
         #hostname = platform.uname()[1]
         prj_path = self.vicon_root + self.prj_path + os.sep
-        self._settings_path = enfTool.getProjectSettings( prj_path )
+        prj_globals = enfTool.getProjectSettings( prj_path )
+        self._settings_path = os.path.join( prj_globals, "settings.ini" )
         self._prjconf = ConfigParser.RawConfigParser()
         self._genericConfLoader( self._prjconf, self._settings_path, self._PRJ_ATTERS, self._PRJ_SECTION )
         

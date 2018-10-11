@@ -9,13 +9,11 @@ import ConfigParser
 import re
 from glob import glob
 
+import utils
 
 _MATCH_LAST_DIGITS = re.compile( '.*?([0-9]+)$', re.I )
 DEFAULT_GLOBALS_DIR = "000000_globals"
 
-def mkdirs( path ):
-    if( not os.path.isfile( path ) ):
-        os.mkdir( os.path.dirname( path ) )
             
 def _absENFscan( path, error, search=None ):
     if not os.path.isdir( path ):
@@ -67,7 +65,7 @@ def getProjectSettings( path ):
         global_folder = DEFAULT_GLOBALS_DIR
     else:
         global_folder = res[0]
-    return os.path.join( path, global_folder, "settings.ini" )
+    return os.path.join( path, global_folder )
 
 def _makeENF( type, name, root_path ):
     ses_info = False
@@ -127,13 +125,14 @@ def _makeENF( type, name, root_path ):
 def createProject( path, prj ):
     _makeENF( "PROJECT", prj, path )
     # make globals
-    mkdirs( os.path.join( path, DEFAULT_GLOBALS_DIR ) )
+    utils.mkdirs( os.path.join( path, DEFAULT_GLOBALS_DIR ) )
     
 def createDay( path, day ):
     _makeENF( "CAPTURE_DAY", day, path )
     
 def createSession( path, ses ):
     _makeENF( "SESSION", ses, path )
+    # update project enf with childs += 1 ?
     
     
 if __name__ == "__main__":
