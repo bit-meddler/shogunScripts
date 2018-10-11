@@ -31,13 +31,15 @@ class ManagedProps( object ):
             for section, keys in tasks.iteritems():
                 for attr in keys:
                     default, opts = None, None
+                    usedDefault = False
                     if( attr in self.__properties ):
                         default, opts = self.__properties[ attr ][3], self.__properties[ attr ][4]
                     try:
                         val = parser.get( section, attr )
                     except( ConfigParser.NoOptionError, ConfigParser.NoSectionError ):
                         val = default
-                    if( not opts is None ):
+                        usedDefault = True
+                    if( (not opts is None) and (not usedDefault) ):
                         if( "load_cast" in opts ):
                             val = opts[ "load_cast" ]( val )
                     update[ attr ] = val
@@ -93,9 +95,9 @@ class DBlogic( ManagedProps ):
         "PRJSETTINGS" : ( "system_fps", "prj_rom_fmt", "prj_cal_session", "prj_rom_session", "day_format", "datecode_format", "_sessions" )
     }
                       
-    _PRJ_ATTERS   = ( "system_fps", "current_location", "prj_rom_fmt", "prj_cal_session", "prj_rom_session", "current_stage", "day_format", "datecode_format", "last_desc", "_sessions" )
+    _PRJ_ATTERS   = ( "system_fps", "prj_rom_fmt", "prj_cal_session", "prj_rom_session", "current_location", "current_stage", "day_format", "datecode_format", "last_desc", "_sessions" )
     _SYS_ATTERS   = ( "vicon_root", "system_fps", "_sessions", "day_format", "datecode_format", "day_validation" )
-    
+    _NEW_PRJ_MENU = ( "project_name", "system_fps", "prj_rom_fmt", "prj_cal_session", "prj_rom_session", "day_format", "datecode_format", "_sessions" )
     _PROPERTIES   = {
         "vicon_root" : (
             "Vicon Root",
@@ -115,6 +117,12 @@ class DBlogic( ManagedProps ):
             "string",
             "ROM",
              None ),
+        "project_name" : (
+            "New Project Name",
+            "Name of the new Project (shouldn't collide)",
+            "string",
+            "",
+            { "validator" : "[A-Za-z0-9#\-_]+" } ),
         "prj_cal_session" : (
             "Calibration folder",
             "Folder that System Calibrations are saved into per shooting day.",
@@ -224,7 +232,7 @@ class DBlogic( ManagedProps ):
         # print( "enfTool --getProjectSettings -p {}".format( prj_path ) )
         # TODO: find a placce to save out Project settings per host
         #hostname = platform.uname()[1]
-        prj_path = os.path.join( self.vicon_root, self.current_client, self.current_project, "" )
+        prj_path = self.getPrjPath()
         prj_globals = enfTool.getProjectSettings( prj_path )
         self._settings_path = os.path.join( prj_globals, "settings.ini" )
         
@@ -242,9 +250,12 @@ class DBlogic( ManagedProps ):
     def _saveAppCfg( self ):
         self.genericConfSaver( self._cfg_fqp, self._CFG_SET )
 
+    def getPrjPath( self ):
+        return os.path.join( self.vicon_root, self.current_client, self.current_project, "" )
+        
     def generate( self, dayname, daycode ):
         # print( "enfTool --biggestSuffix -p {} -t {}".format( prj_path, dayname ) )
-        prj_path = os.path.join( self.vicon_root, self.current_client, self.current_project, "" )
+        prj_path = self.getPrjPath()
         self.last_desc = dayname
         suffix = enfTool.biggestSuffix( prj_path, dayname ) + 1
         meta_data = {
@@ -267,10 +278,21 @@ class DBlogic( ManagedProps ):
         # publish to Henchman?
 
     def newProject( self, name ):
-        print( "enfTool -createProject -path '{}' -prj '{}'".format( self.vicon_root, name ) )
+        self.current_project = name
+        # TODO: more of this needs to live in DBlogic!
+        path = os.path.dirname( os.path.dirname( self.getPrjPath() ) )
+        enfTool.createProject( path, name )
+        prj_globals = enfTool.getProjectSettings( self.getPrjPath() )
+        self._settings_path = os.path.join( prj_globals, "settings.ini" )
+        # should auto create globals_000000
+        self._saveProjectSettings()
+        
+        self._saveAppCfg()
         self._updateProjectList()
-        self._ui_ref.project_idx = self.project_list.index( name )
+        # Something wrong here
         self._ui_ref._updateCpUi()
+        self.current_project = name
+        self._ui_ref.project_idx = self.project_list.index( name )
         self._ui_ref._updatePath()
         
         
@@ -308,6 +330,8 @@ class DayBuild( QtGui.QMainWindow ):
         # Sanity test
         # if( ( len( self.logic.client_list ) == 0 ) or ( len( self.logic.project_list ) == 0 ) ):
             # return
+        # HACK!
+        self._clients_combo.currentIndexChanged.disconnect()
         # update combos
         self._clients_combo.clear() 
         self._project_combo.clear()
@@ -319,6 +343,7 @@ class DayBuild( QtGui.QMainWindow ):
         self._clients_combo.setCurrentIndex( self.client_idx  )
         self._project_combo.setCurrentIndex( self.project_idx )
         # Look at client/project current stage?
+        self._clients_combo.currentIndexChanged.connect( self._clientChangeCB )
         
     def _projectLockCB( self ):
         lock = not self._project_lock.isChecked()
@@ -348,7 +373,7 @@ class DayBuild( QtGui.QMainWindow ):
     
     def _clientChangeCB( self ):
         # Hack to dodge Recursion error
-        self._clients_combo.currentIndexChanged.disconnect()
+        #self._clients_combo.currentIndexChanged.disconnect()
         # hack
         self.client_idx = self._clients_combo.currentIndex()
         self.logic.current_client = self._clients_combo.currentText()
@@ -357,7 +382,7 @@ class DayBuild( QtGui.QMainWindow ):
         self.logic.current_project = self.logic.project_list[ self.project_idx ]
         self._updateCpUi()
         # Hack to dodge Recursion error
-        self._clients_combo.currentIndexChanged.connect( self._clientChangeCB )
+        #self._clients_combo.currentIndexChanged.connect( self._clientChangeCB )
         # /hack
         
     def _setStage( self ):
@@ -370,19 +395,19 @@ class DayBuild( QtGui.QMainWindow ):
         self.logic.current_stage = self._stage.value()
     
     def _launchPrjSettings( self ):
-        #print( "Project Settings" )
         self._prjPopup = PPopUp( self._parent_app, self.logic, self._savePrj )
         self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._PRJ_ATTERS, "Project Settings" )
         self._prjPopup.show()
         
     def _launchSysSettings( self ):
-        #print( "System Settings" )
         self._prjPopup = PPopUp( self._parent_app, self.logic, self._saveSys )
         self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._SYS_ATTERS, "System Settings" )
         self._prjPopup.show()
         
-    def _launchNewProject( self ):
-        self.logic.newProject( "TEST" )
+    def _launchNewProj( self ):
+        self._prjPopup = PPopUp( self._parent_app, self.logic, self._newProj )
+        self._prjPopup.setProps( self.logic._PROPERTIES, self.logic._NEW_PRJ_MENU, "System Settings" )
+        self._prjPopup.show()
         
     def _savePrj( self, update ):
         self.logic.acceptDictUI( update )
@@ -392,13 +417,17 @@ class DayBuild( QtGui.QMainWindow ):
         self.logic.acceptDictUI( update )
         self.logic._saveAppCfg()
         
+    def _newProj( self, data ):
+        self.logic.acceptDictUI( data )
+        self.logic.newProject( data["project_name"] )
+        
     def _saveExit( self ):
         self.logic._saveAppCfg()
         QtGui.qApp.quit()
         
     def _buildUI( self ):
         self.setWindowTitle( "Make my Day - V2.0.1" )
-        boxWidth = 100
+        boxWidth = 80
         
         anon = None
         
@@ -521,7 +550,6 @@ class DayBuild( QtGui.QMainWindow ):
         self.setCentralWidget( qw )
         
         # generate comboBox items
-        self._updateCpUi()
         self._projectLockCB()
         self._setStage()
         self._stageCB()
@@ -530,13 +558,15 @@ class DayBuild( QtGui.QMainWindow ):
         # attach CBs
         self._choose.clicked.connect( self._chooseCP )
         self._generate.clicked.connect( self.generate )
-        self._new_prj.clicked.connect( self._launchNewProject )
+        self._new_prj.clicked.connect( self._launchNewProj )
         self._project_lock.stateChanged.connect( self._projectLockCB )
         self._date_lock.stateChanged.connect( self._dateLockCB )
         self._clients_combo.currentIndexChanged.connect( self._clientChangeCB )
         self._location.currentIndexChanged.connect( self._stageCB )
         self._stage.valueChanged.connect( self._stageCB )
         self._generate.setFocus()
+        # HACK
+        self._updateCpUi()
         
     def run( self ):
         self.show()
