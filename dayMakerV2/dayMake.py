@@ -13,6 +13,11 @@ class ManagedProps( object ):
 
     def __init__( self, properties ):
         self.__properties = properties
+        # Set defaults
+        d={}
+        for key in properties.keys():
+            d[ key ] = self.__properties[ key ][3]
+        self.acceptDict( d )
         
     def acceptDict( self, update ):
         for k, v in update.iteritems():
@@ -23,7 +28,7 @@ class ManagedProps( object ):
         parser = ConfigParser.RawConfigParser()
         if( os.path.isfile( path ) and (not force_defaults) ):
             parser.read( path )
-            for section, keys in tasks:
+            for section, keys in tasks.iteritems():
                 for attr in keys:
                     default, opts = None, None
                     if( attr in self.__properties ):
@@ -42,7 +47,7 @@ class ManagedProps( object ):
                 print( "Ignoring '{}'.".format( os.path.basename( path ) ) )
             else:
                 print( "Config file '{}' missing.".format( os.path.basename( path ) ) )
-            for section, keys in tasks:
+            for section, keys in tasks.iteritems():
                 print( "Loading defaults for [{}]".format( section ) )
                 for attr in keys:
                     default = ""
@@ -52,9 +57,9 @@ class ManagedProps( object ):
         # execute
         self.acceptDict( update )
         
-    def genericConfSaver( self, path, task ):
+    def genericConfSaver( self, path, tasks ):
         parser = ConfigParser.RawConfigParser()
-        for section, keys in tasks:
+        for section, keys in tasks.iteritems():
             # safty for new cfg file
             if( not parser.has_section( section ) ):
                 parser.add_section( section )
@@ -77,15 +82,20 @@ class ManagedProps( object ):
         fh.close()
         
         
-class DBlogic( object ):
-    _CFG_FILENAME =   "dayBuild.cfg"
-    _CFG_SECTION  =   "SYSTEM"
-    _PRJ_SECTION  =   "DAYSETTINGS"
-    _SAVED_ATTERS = ( "vicon_root", "current_client", "current_project",
-                      "day_format", "datecode_format", "day_validation" )
+class DBlogic( ManagedProps ):
+    _CFG_FILENAME =   "mocapSettings.cfg"
+    _CFG_SET = {
+        "SETTINGS" : ( "vicon_root", "current_client", "current_project", "day_format", "datecode_format", "day_validation" ),
+        "HENCHMAN" : ( "vicon_root", "current_client", "current_project", "day_format", "datecode_format", "day_validation" )
+    }
+    _PRJ_SET = {
+        "DAYSETTINGS" : ( "current_location", "current_stage", "last_desc" ),
+        "PRJSETTINGS" : ( "system_fps", "prj_rom_fmt", "prj_cal_session", "prj_rom_session", "day_format", "datecode_format", "_sessions" )
+    }
+                      
     _PRJ_ATTERS   = ( "system_fps", "current_location", "prj_rom_fmt", "prj_cal_session", "prj_rom_session", "current_stage", "day_format", "datecode_format", "last_desc", "_sessions" )
-    _SYS_ATTERS   = ( "vicon_root", "system_fps", "_sessions",
-                      "day_format", "datecode_format", "day_validation" )
+    _SYS_ATTERS   = ( "vicon_root", "system_fps", "_sessions", "day_format", "datecode_format", "day_validation" )
+    
     _PROPERTIES   = {
         "vicon_root" : (
             "Vicon Root",
@@ -183,14 +193,11 @@ class DBlogic( object ):
     }
     
     def __init__( self, ui, clean_start=False ):
-        super( DBlogic, self ).__init__()
+        super( DBlogic, self ).__init__( self._PROPERTIES )
         self._local_data = os.getenv( "LOCALAPPDATA" )# Multiplatform?
-        self._config = ConfigParser.RawConfigParser()
         self._ui_ref = ui
-        self._config.add_section( self._CFG_SECTION )
         self._cfg_fqp = os.path.join( self._local_data, self._CFG_FILENAME )
-        self.clean_start  = clean_start # TODO: don't load cfg
-        self._loadAppCfg()
+        self._loadAppCfg( force_defaults=clean_start )
         self._initDate()
         
     def _initDate( self ):
@@ -202,13 +209,9 @@ class DBlogic( object ):
         self.client_list  = enfTool.scanDB( self.vicon_root )
         
     def _updateProjectList( self ):
-        prj_path = self.vicon_root + self.current_client + os.path.sep
+        prj_path = os.path.join( self.vicon_root, self.current_client, "" )
         # print( "enfTool --scanProjects -p {}".format( prj_path ) )
         self.project_list = enfTool.scanProjects( prj_path )
-
-    def acceptDict( self, update ):
-        for k, v in update.iteritems():
-            setattr( self, k, v )
             
     def acceptDictUI( self, update ):
         self.acceptDict( update )
@@ -216,85 +219,32 @@ class DBlogic( object ):
         self._initDate()
         self._ui_ref._setStage()
         self._ui_ref._dayUpdate()
-            
-    def _genericConfLoader( self, parser, path, keys, section ):
-        update = {}
-        if( os.path.isfile( path ) ):
-            parser.read( path )            
-            for attr in keys:
-                default, opts = None, None
-                if( attr in self._PROPERTIES ):
-                    default, opts = self._PROPERTIES[ attr ][3], self._PROPERTIES[ attr ][4]
-                try:
-                    val = parser.get( section, attr )
-                except ConfigParser.NoOptionError:
-                    val = default
-                if( not opts is None ):
-                    if( "load_cast" in opts ):
-                        val = opts[ "load_cast" ]( val )
-                update[ attr ] = val
-        else:
-            # Load Defaults
-            print( "Config file '{}' missing, Loading Defaults".format( os.path.basename( path ) ) )
-            for attr in keys:
-                default = ""
-                if( attr in self._PROPERTIES ):
-                    default = self._PROPERTIES[ attr ][3]
-                update[ attr ] = default
-        # execute
-        self.acceptDict( update )
-        
-    def _genericConfSaver( self, parser, path, keys, section ):
-        # safty for new
-        if( not parser.has_section( section ) ):
-            parser.add_section( section )
-        for attr in keys:
-            opts = None
-            if( attr in self._PROPERTIES ):
-                opts = self._PROPERTIES[ attr ][4]
-            if( not opts is None ):
-                # has opts
-                if( "save_cast" in opts ):
-                    cast = opts[ "save_cast" ]
-                    parser.set( section, attr, cast( getattr( self, attr ) ) )
-                    continue
-            # fall through is no cast or opts        
-            parser.set( section, attr, getattr( self, attr ) )
-                
-        enfTool.mkdirs( path )
-        fh = open( path, "w" )
-        parser.write( fh )
-        fh.close()
         
     def _loadProjectSettings( self ):
         # print( "enfTool --getProjectSettings -p {}".format( prj_path ) )
         # TODO: find a placce to save out Project settings per host
         #hostname = platform.uname()[1]
-        prj_path = self.vicon_root + self.prj_path + os.sep
+        prj_path = os.path.join( self.vicon_root, self.current_client, self.current_project, "" )
         prj_globals = enfTool.getProjectSettings( prj_path )
         self._settings_path = os.path.join( prj_globals, "settings.ini" )
-        self._prjconf = ConfigParser.RawConfigParser()
-        self._genericConfLoader( self._prjconf, self._settings_path, self._PRJ_ATTERS, self._PRJ_SECTION )
+        
+        self.genericConfLoader( self._settings_path, self._PRJ_SET )
         
     def _saveProjectSettings( self ):
-        self._genericConfSaver( self._prjconf, self._settings_path, self._PRJ_ATTERS, self._PRJ_SECTION )
+        self.genericConfSaver( self._settings_path, self._PRJ_SET )
         
-    def _loadAppCfg( self ):
-        self._genericConfLoader( self._config, self._cfg_fqp, self._SAVED_ATTERS, self._CFG_SECTION )
+    def _loadAppCfg( self, force_defaults=False ):
+        self.genericConfLoader( self._cfg_fqp, self._CFG_SET, force_defaults=False )
         # update list data
         self._updateClientList()
         self._updateProjectList()
 
     def _saveAppCfg( self ):
-        for attr in self._SAVED_ATTERS:
-            self._config.set( self._CFG_SECTION, attr, getattr( self, attr ) )
-        fh = open( self._cfg_fqp, "w" )
-        self._config.write( fh )
-        fh.close()
+        self.genericConfSaver( self._cfg_fqp, self._CFG_SET )
 
     def generate( self, dayname, daycode ):
         # print( "enfTool --biggestSuffix -p {} -t {}".format( prj_path, dayname ) )
-        prj_path = self.vicon_root + self.prj_path + os.sep
+        prj_path = os.path.join( self.vicon_root, self.current_client, self.current_project, "" )
         self.last_desc = dayname
         suffix = enfTool.biggestSuffix( prj_path, dayname ) + 1
         meta_data = {
@@ -313,6 +263,7 @@ class DBlogic( object ):
             #print( "enfTool -createSession -path '{}' -ses '{}'".format( day_path, session ) )
             enfTool.createSession( day_path, session )
         self._saveProjectSettings()
+        self._saveAppCfg()
         # publish to Henchman?
 
     def newProject( self, name ):
@@ -343,11 +294,10 @@ class DayBuild( QtGui.QMainWindow ):
         self._buildUI()
 
     def _updatePath( self ):
-        self.project_idx = self._project_combo.currentIndex()
-        self.logic.current_project = self._project_combo.itemText( self.project_idx )
+        self.logic.current_project = self._project_combo.currentText()
         # Compose 
-        self.logic.prj_path = "{}{}{}".format( self.logic.current_client, os.path.sep, self.logic.current_project )
-        self._project_path.setText( self.logic.prj_path )
+        prj_path = "{}{}{}".format( self.logic.current_client, " > ", self.logic.current_project )
+        self._project_path.setText( prj_path )
         # Get Project Settings
         self.logic._loadProjectSettings()
         self._session_name.setText( self.logic.last_desc )
@@ -356,12 +306,15 @@ class DayBuild( QtGui.QMainWindow ):
     
     def _updateCpUi( self ):
         # Sanity test
-        if( ( len( self.logic.client_list ) == 0 ) or ( len( self.logic.project_list ) == 0 ) ):
-            return
+        # if( ( len( self.logic.client_list ) == 0 ) or ( len( self.logic.project_list ) == 0 ) ):
+            # return
         # update combos
         self._clients_combo.clear() 
         self._project_combo.clear()
         self._clients_combo.addItems( self.logic.client_list  )
+        if( self.logic.current_client == "" ):
+            self.logic.current_client = self._clients_combo.currentText()
+            self.logic._updateProjectList()
         self._project_combo.addItems( self.logic.project_list )
         self._clients_combo.setCurrentIndex( self.client_idx  )
         self._project_combo.setCurrentIndex( self.project_idx )
@@ -376,7 +329,11 @@ class DayBuild( QtGui.QMainWindow ):
             self._updatePath()
         
     def generate( self ):
-        self.logic.generate( self._session_name.text(), self._date_code.text() )
+        name_txt = self._session_name.text()
+        if( name_txt == ""):
+            print("Error, no day name")
+            return
+        self.logic.generate( name_txt, self._date_code.text() )
         
     def _chooseCP( self, innerCall=False ):
         # get selected project
@@ -394,7 +351,7 @@ class DayBuild( QtGui.QMainWindow ):
         self._clients_combo.currentIndexChanged.disconnect()
         # hack
         self.client_idx = self._clients_combo.currentIndex()
-        self.logic.current_client = self._clients_combo.itemText( self.client_idx )
+        self.logic.current_client = self._clients_combo.currentText()
         self.project_idx = 0
         self.logic._updateProjectList()
         self.logic.current_project = self.logic.project_list[ self.project_idx ]
@@ -434,6 +391,10 @@ class DayBuild( QtGui.QMainWindow ):
     def _saveSys( self, update ):
         self.logic.acceptDictUI( update )
         self.logic._saveAppCfg()
+        
+    def _saveExit( self ):
+        self.logic._saveAppCfg()
+        QtGui.qApp.quit()
         
     def _buildUI( self ):
         self.setWindowTitle( "Make my Day - V2.0.1" )
@@ -536,7 +497,7 @@ class DayBuild( QtGui.QMainWindow ):
         settings_m = self._menuBar.addMenu( '&Settings' )
         
         exit_itm = QtGui.QAction( 'E&xit', self )        
-        exit_itm.triggered.connect( QtGui.qApp.quit )
+        exit_itm.triggered.connect( self._saveExit )
         file_m.addAction( exit_itm )
 
         proj_itm = QtGui.QAction( '&Project', self )        
