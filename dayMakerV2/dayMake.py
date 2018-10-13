@@ -327,9 +327,6 @@ class DayBuild( QtGui.QMainWindow ):
         self.logic._saveAppCfg()
     
     def _updateCpUi( self ):
-        # Sanity test
-        # if( ( len( self.logic.client_list ) == 0 ) or ( len( self.logic.project_list ) == 0 ) ):
-            # return
         # HACK!
         self._clients_combo.currentIndexChanged.disconnect()
         # update combos
@@ -372,18 +369,13 @@ class DayBuild( QtGui.QMainWindow ):
         self._date_code.setReadOnly( lock )
     
     def _clientChangeCB( self ):
-        # Hack to dodge Recursion error
-        #self._clients_combo.currentIndexChanged.disconnect()
-        # hack
         self.client_idx = self._clients_combo.currentIndex()
         self.logic.current_client = self._clients_combo.currentText()
         self.project_idx = 0
         self.logic._updateProjectList()
         self.logic.current_project = self.logic.project_list[ self.project_idx ]
         self._updateCpUi()
-        # Hack to dodge Recursion error
-        #self._clients_combo.currentIndexChanged.connect( self._clientChangeCB )
-        # /hack
+
         
     def _setStage( self ):
         loc_idx = self._location.findText( self.logic.current_location )
