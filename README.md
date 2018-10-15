@@ -7,10 +7,10 @@ Henchman
 Calman
 
 ## vst/vss
-Test my VST
+Test my VST __todo__
 Develop new VSS
 
 ## Post Helpers
 bodyNav works in SP1.2!
-pyBodyNav
+pyBodyNav?
 

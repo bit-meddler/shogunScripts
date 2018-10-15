@@ -6,13 +6,63 @@ import datetime
 import ConfigParser
 from functools import partial
 
+import vicon_core_api  as VC
+import shogun_live_api as SL
+
+class ViComs( object ):
+    """
+        Wrapper for 'remote control' of Shogun Live, only relevent functions advertised
+    """
+    
+    def __init__( self, host='localhost', port=52800 ):
+        super( ViComs, self ).__init__()
+        self.v_client = VC.Client( host, port )
+        if( self.v_client.connected ):
+            print( "Succesfully Connected" )
+        else:
+            print( "ERROR: No Shogun found on {}".format( host ) )
+            
+        self.capture_interface = SL.CaptureServices( self.v_client )
+        self.cam_cal_interface = SL.CameraCalibrationServices( self.v_client )
+        self.sub_cal_interface = SL.SubjectCalibrationServices( self.v_client )
+
+    def setSlate( self, capture_name ):
+        res = self.capture_interface.set_capture_name( capture_name )
+        if( not res ):
+            print( "ERROR: Unable to set take name to '{}'".format( capture_name ) )
+
+    def setPath( self, capture_path ):
+        res = self.capture_interface.set_capture_folder( capture_path )
+        if( not res ):
+            print( "ERROR: Unable to set path to '{}'".format( capture_path ) )
+
+    def setDesc( self, capture_desc ):
+        res = self.capture_interface.set_capture_description( capture_desc )
+        if( not res ):
+            print( "Unable to set desc to '{}'".format( capture_desc ) )
+
+    def exportCal( self, file_path ):
+        res = self.cam_cal_interface.export_camera_calibration( file_path )
+        if( not res ):
+            print( "Unable to export cal as '{}'".format( file_path ) )
+
+    def recRom( self, file_path ):
+        res, rom_id = self.sub_cal_interface.start_subject_calibration( file_path )
+        if( not res ):
+            print( "Unable record ROM as '{}'".format( file_path ) )
+        return rom_id
+
 
 class Henchman( QtGui.QMainWindow ):
 
     def __init__( self, parent_app, clean_start=False ):
         super( Henchman, self ).__init__()
         self._parent_app = parent_app
-
+        self.vicon = ViComs()
+        # TODO: Read Henchman config file
+        self._cal_name = "CAL"
+        self._rom_name = "ROM"
+        
         self._buildUI()
 
         
@@ -25,11 +75,6 @@ class Henchman( QtGui.QMainWindow ):
         # Set Capture Target #####################################################
         grp_1 = QtGui.QGroupBox( "Set Capture Targets" )
         grid_1  = QtGui.QGridLayout()
-        anon = QtGui.QLabel( r"Current Client \ Project \ Day ", self )
-        grid_1.addWidget( anon, 0, 0, 1, 11 )
-        self.day_path = QtGui.QLineEdit( r"blar\blar\blar", self )
-        self.day_path.setReadOnly( True )
-        grid_1.addWidget( self.day_path, 1, 0, 1, 11 )       
         
         hbox = QtGui.QHBoxLayout()
         self.day_select_but = QtGui.QPushButton( "Update Day", self )
@@ -44,8 +89,14 @@ class Henchman( QtGui.QMainWindow ):
         anon = QtGui.QWidget()
         anon.setContentsMargins( 0, 0, 0, 0 )
         anon.setLayout( hbox )
-        grid_1.addWidget( anon, 2, 0, 1, 11 )
+        grid_1.addWidget( anon, 0, 0, 1, 11 )
         
+        anon = QtGui.QLabel( r"Current Client \ Project \ Day ", self )
+        grid_1.addWidget( anon, 1, 0, 1, 11 )
+        self.day_path = QtGui.QLineEdit( r"blar\blar\blar", self )
+        self.day_path.setReadOnly( True )
+        grid_1.addWidget( self.day_path, 2, 0, 1, 11 )       
+
         hbox = QtGui.QHBoxLayout()
         # TODO, Auto Gen based on globals "sessions"
         self.ses_cal_but = QtGui.QPushButton( "CAL", self )
@@ -218,20 +269,24 @@ class Henchman( QtGui.QMainWindow ):
         )
         # Sanity Check ?
         
-        print( "selected_directory: {}'".format( selected ) )
-        # publish to cfg
+        # print( "selected_directory: {}'".format( selected ) )
+        # TODO: update cfg
         self.day_path.setText( selected )
     
     def _slateCal( self, mode ):
         time = self.unUck( self.time_code.text() )
         slate = "{}_{}_calibration_01".format( time[:4], mode )
-        self.setSession( "CAL" )
-        print( "vicon -setSlate '{}'".format( slate ) )
+        self.setSession( self._cal_name )
+        # print( "vicon -setSlate '{}'".format( slate ) )
+        self.vicon.setSlate( slate )
         
     def _saveCal( self, mode ):
         time = self.unUck( self.time_code.text() )
-        slate = "{}_{}_cal_01".format( time[:4], mode )
-        print( "vicon -exportCal '{}'".format( slate ) )
+        slate = "{}_{}_cal_01.xcp".format( time[:4], mode )
+        path = self.unUck( self.day_path.text() )
+        file_path = os.path.join( path, self._cal_name, slate )
+        # print( "vicon -exportCal '{}'".format( slate ) )
+        self.vicon.exportCal( file_path )
         
     def unUck( self, unicode_shit ):
         return unicode_shit.encode( 'ascii', 'ignore' )
@@ -249,7 +304,8 @@ class Henchman( QtGui.QMainWindow ):
         
     def setSession( self, session ):
         path = self.unUck( self.day_path.text() )
-        print( "vicon -setSession '{}'".format( os.path.join( path, session ) ) )
+        # print( "vicon -setPath '{}'".format( os.path.join( path, session ) ) )
+        self.vicon.setPath( os.path.join( path, session ) )
         
     def _generateSlate( self, mode ):
         # clean and sanity check performer name
@@ -291,14 +347,16 @@ class Henchman( QtGui.QMainWindow ):
         slate = self.unUck( self.slate_format.text() )
         slate = slate.format( **meta )
         self.slate_result.setText( slate )
-        
+
     def _publish( self ):
         slate = self.unUck( self.slate_result.text() )
         patch = self.unUck( self.performer_patch.currentText() )
-        self.setSession( "ROM" )
-        print( "vicon -setSlate '{}'".format( slate ) )
-        print( "vicon -setDesc '{}'".format( patch ) )
-        
+        self.setSession( self._rom_name )
+        # print( "vicon -setSlate '{}'".format( slate ) )
+        # print( "vicon -setDesc '{}'".format( patch ) )
+        self.vicon.setSlate( slate )
+        self.vicon.setDesc( patch )
+
     def _setSlate( self ):
         format = ""
         if( self.slate_simp_rb.isChecked() ):
@@ -312,8 +370,7 @@ class Henchman( QtGui.QMainWindow ):
         
             format = "{Performer_first}_{Mode}_ROM_{suffix:0>2}"
         self.slate_format.setText( format )
-        
-        
+
     def run( self ):
         self.show()
         #self._generate.setFocus()
