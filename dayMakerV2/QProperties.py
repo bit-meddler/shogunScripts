@@ -18,9 +18,22 @@
 from PySide import QtGui, QtCore
 
 class PSelectableLabel( QtGui.QLabel ):
-    # do it like Maya
-    pass
-    
+    def __init__( self, text=None, parent=None, f=0 ):
+        super( PSelectableLabel, self ).__init__( text, parent, f )
+        
+    def enterEvent( self, event ):
+        print "Mouse Entered"
+        print self.parent()._dragging
+        return super( PSelectableLabel, self ).enterEvent( event )
+
+    def leaveEvent( self, event ):
+        print "Mouse Exited"
+        return super( PSelectableLabel, self ).leaveEvent( event )
+        
+    def mousePressEvent( self, event ):
+        super( PSelectableLabel, self ).mousePressEvent( event )
+        if( event.button() & QtCore.Qt.LeftButton ):
+            self.parent()._dragging = True
     
 class PIntWidget( QtGui.QSpinBox ):
 
@@ -213,6 +226,8 @@ class PPane( QtGui.QWidget ):
         self._obj_ref = obj
         self._pd_ref = prop_dict
         self._properties = properties
+        self._selected = set()
+        self._dragging = False
         self._register = {}
         # Prep UI
         self.setWindowTitle( title )
@@ -225,8 +240,8 @@ class PPane( QtGui.QWidget ):
                 continue
             lbl, tip, p_type, default, opts = self._pd_ref[ key ]
             # Label
-            anon = QtGui.QLabel( lbl, self )
-            tmp_grid.addWidget( anon, row, 0, 1, 1 )
+            lab = PSelectableLabel( lbl, self )
+            tmp_grid.addWidget( lab, row, 0, 1, 1 )
             # input cases
             anon = None
             if( p_type is None ):
