@@ -17,7 +17,11 @@
 
 from PySide import QtGui, QtCore
 
-
+class PSelectableLabel( QtGui.QLabel ):
+    # do it like Maya
+    pass
+    
+    
 class PIntWidget( QtGui.QSpinBox ):
 
     def __init__( self, parent_app, default, opts=None ):
@@ -28,17 +32,22 @@ class PIntWidget( QtGui.QSpinBox ):
         self.step_lo  = 1
         self.step_mid = 5
         self.step_hi  = 10
+        self.step_scale = 16.
         # adapt for special use
         self.recv_cast = None
         self.emit_cast = None
         self.load_cast = None
-        self.save_cast = None
-        
+        self.save_cast = None        
+        # take the opts
         if( not opts is None ):
-            # take the opts
             for k, v in opts.iteritems():
                 setattr( self, k, v )
+        # take any updates to the range
         self.setRange( self.min, self.max )
+        # Spinner
+        self._mousing = False
+        # initalize to Default
+        self.setValue( self.default )
         
     def getPValue( self ):
         if( self.emit_cast is None ):
@@ -51,6 +60,39 @@ class PIntWidget( QtGui.QSpinBox ):
             self.setValue( val )
         else:
             self.setValue( self.recv_cast( val ) )
+
+    # Override mouse events to capture clicks
+    def mousePressEvent( self, event ):
+        super( PIntWidget, self ).mousePressEvent( event )
+        if( event.button() & QtCore.Qt.MiddleButton ):
+            self._mousing = True
+            self._start_pos = event.pos()
+            self.setCursor( QtCore.Qt.SizeVerCursor )
+            self._startVal = self.value()
+
+    def mouseMoveEvent( self, event ):
+        if not self._mousing:
+            return
+            
+        mods = QtGui.QApplication.keyboardModifiers()
+        
+        delta = self.step_mid
+        if( mods & QtCore.Qt.ShiftModifier ):
+            delta = self.step_lo
+        elif( mods & QtCore.Qt.AltModifier ):
+            delta = self.step_hi
+        # TODO: Do this nicely
+        change = ( event.pos().y() - self._start_pos.y() )
+        val = self._startVal + int( -1. * (change/self.step_scale) * delta )
+        self.setValue( val )
+
+    def mouseReleaseEvent( self, event ):
+        super( PIntWidget, self ).mouseReleaseEvent( event )
+        mods = QtGui.QApplication.keyboardModifiers()
+        if( mods & QtCore.Qt.ControlModifier ):
+            self.setValue( self.default )
+        self._mousing = False
+        self.unsetCursor()
 
 
 class PFloatWidget( QtGui.QLineEdit ):
@@ -326,28 +368,29 @@ if( __name__ == "__main__" ):
             "",
             "int",
             1,
-            { "min" :  1,
-              "max" : 10,
+            { "min" :    1,
+              "max" : 1000,
             } ],
         "s_y" : [
             "Scale Y",
             "",
             "int",
-            1,
-            { "min" :  1,
-              "max" : 10,
+            2,
+            { "min" :    1,
+              "max" : 1000,
             } ],
         "s_z" : [
             "Scale Z",
             "",
             "int",
-            1,
-            { "min" :  1,
-              "max" : 10,
+            3,
+            { "min" :    1,
+              "max" : 1000,
             } ],
     }
     prop_order = [ 't_x', 't_y', 't_z', 'r_x', 'r_y', 'r_z', 's_x', 's_y', 's_z' ]
-    X = object()
+    class Dum( object ): pass
+    X = Dum()
     for attr in prop_order:
         setattr( X, attr, 1 )
     app = QtGui.QApplication( sys.argv )
