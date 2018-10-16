@@ -18,23 +18,12 @@
 from PySide import QtGui, QtCore
 
 class PSelectableLabel( QtGui.QLabel ):
+    # I can probably do this at a 'container' level, so may not need to subclass this.
     def __init__( self, text=None, parent=None, f=0 ):
         super( PSelectableLabel, self ).__init__( text, parent, f )
-        
-    def enterEvent( self, event ):
-        print "Mouse Entered"
-        print self.parent()._dragging
-        return super( PSelectableLabel, self ).enterEvent( event )
+        # print self.buddy()
 
-    def leaveEvent( self, event ):
-        print "Mouse Exited"
-        return super( PSelectableLabel, self ).leaveEvent( event )
         
-    def mousePressEvent( self, event ):
-        super( PSelectableLabel, self ).mousePressEvent( event )
-        if( event.button() & QtCore.Qt.LeftButton ):
-            self.parent()._dragging = True
-    
 class PIntWidget( QtGui.QSpinBox ):
 
     def __init__( self, parent_app, default, opts=None ):
@@ -243,28 +232,29 @@ class PPane( QtGui.QWidget ):
             lab = PSelectableLabel( lbl, self )
             tmp_grid.addWidget( lab, row, 0, 1, 1 )
             # input cases
-            anon = None
+            widget = None
             if( p_type is None ):
                 continue
             elif( p_type == "string" ):
-                anon = PStringWidget( self, default, opts )
-                anon.setPValue( getattr( self._obj_ref, key ) )
+                widget = PStringWidget( self, default, opts )
+                widget.setPValue( getattr( self._obj_ref, key ) )
             elif( p_type == "int" ):
-                anon = PIntWidget( self, default, opts )
-                anon.setPValue( getattr( self._obj_ref, key ) )
+                widget = PIntWidget( self, default, opts )
+                widget.setPValue( getattr( self._obj_ref, key ) )
             elif( p_type == "float" ):
-                anon = PFloatWidget( self, default, opts )
-                anon.setPValue( getattr( self._obj_ref, key ) )
+                widget = PFloatWidget( self, default, opts )
+                widget.setPValue( getattr( self._obj_ref, key ) )
             elif( p_type == "Xchoice" ):
-                anon = PXChoiceWidget( self, default, opts )
-                anon.setPValue( getattr( self._obj_ref, key ) )
+                widget = PXChoiceWidget( self, default, opts )
+                widget.setPValue( getattr( self._obj_ref, key ) )
             # done switching
             # Sanity Check
-            if( anon is None ):
+            if( widget is None ):
                 continue
-            anon.setToolTip( tip )
-            tmp_grid.addWidget( anon, row, 1, 1, 1 )
-            self._register[ key ] = anon
+            widget.setToolTip( tip )
+            lab.setBuddy( widget )
+            tmp_grid.addWidget( widget, row, 1, 1, 1 )
+            self._register[ key ] = widget
             row += 1
         # Finalize
         self.setLayout( tmp_grid )
@@ -276,8 +266,27 @@ class PPane( QtGui.QWidget ):
                 continue
             ret[ prop ] = self._register[ prop ].getPValue()
         return ret
+        
+    def mousePressEvent( self, event ):
+        recever = self.childAt( event.pos() )
+        if( (event.button() & QtCore.Qt.LeftButton) and
+            (type( recever ) == PSelectableLabel) ):
+            self._dragging = True
+        super( PPane, self ).mousePressEvent( event )
+            
+    def mouseMoveEvent( self, event ):
+        recever = self.childAt( event.pos() )
+        if( type( recever ) == PSelectableLabel ):
+            print "over {}".format( self.childAt( event.pos() ).text() )        
+        super( PPane, self ).mouseMoveEvent( event )
 
-
+    def mouseReleaseEvent( self, event ):
+        recever = self.childAt( event.pos() )
+        if( (event.button() & QtCore.Qt.LeftButton) and
+            (type( recever ) == PSelectableLabel) ):
+            self._dragging = False
+        super( PPane, self ).mouseReleaseEvent( event )
+        
 class PPopUp( QtGui.QDialog ):
 
     def __init__( self, parent_app, obj, update_func ):
@@ -324,7 +333,7 @@ class PPopUp( QtGui.QDialog ):
         vals = self._pw._publish()
         self._update_func( vals )
         self.close()
-        
+
         
 if( __name__ == "__main__" ):
     # Test Props, imitating a Maya Channel Editor.
