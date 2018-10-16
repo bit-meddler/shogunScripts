@@ -12,10 +12,11 @@
 # Maya Attribute changes to copy
 # https://knowledge.autodesk.com/support/maya/downloads/caas/CloudHelp/cloudhelp/2017/ENU/Maya/files/GUID-6F862011-4578-40A0-9902-786CA2A44AE5-htm.html
 # [Return]: Lose Focus, [Enter] Keep Focus.
-# Draggable Delta: [Shift] + [MMB-Drag] = lo step, [MMB-Drag] = mid, [Ctrl] + [MMB-Drag] = Hi
+# Draggable Delta: [Shift] + [MMB-Drag] = lo step, [MMB-Drag] = mid, [Alt] + [MMB-Drag] = Hi
 # Also [Ctrl] + [LMB-Click] resets to default.
 
 from PySide import QtGui, QtCore
+
 
 class PSelectableLabel( QtGui.QLabel ):
     # I can probably do this at a 'container' level, so may not need to subclass this.
@@ -215,7 +216,9 @@ class PPane( QtGui.QWidget ):
         self._obj_ref = obj
         self._pd_ref = prop_dict
         self._properties = properties
-        self._selected = set()
+        self._selected = []
+        self._pending = []
+        self._last_selected = None
         self._dragging = False
         self._register = {}
         # Prep UI
@@ -270,21 +273,39 @@ class PPane( QtGui.QWidget ):
     def mousePressEvent( self, event ):
         recever = self.childAt( event.pos() )
         if( (event.button() & QtCore.Qt.LeftButton) and
-            (type( recever ) == PSelectableLabel) ):
+            (type( recever ) == PSelectableLabel)
+        ):
             self._dragging = True
+            self._pending  = [ recever ]
+            print "mid_light {}".format( recever.text() )
         super( PPane, self ).mousePressEvent( event )
             
     def mouseMoveEvent( self, event ):
         recever = self.childAt( event.pos() )
-        if( type( recever ) == PSelectableLabel ):
-            print "over {}".format( self.childAt( event.pos() ).text() )        
+        if( (type( recever ) == PSelectableLabel) and
+            (not recever in self._pending) and
+            (self._dragging)
+        ):
+            print( "mid_light {}".format( recever.text() ) )
+            self._pending.append( recever )
         super( PPane, self ).mouseMoveEvent( event )
 
     def mouseReleaseEvent( self, event ):
         recever = self.childAt( event.pos() )
         if( (event.button() & QtCore.Qt.LeftButton) and
-            (type( recever ) == PSelectableLabel) ):
+            (type( recever ) == PSelectableLabel)
+        ):
+            invert = bool( QtGui.QApplication.keyboardModifiers() & QtCore.Qt.ControlModifier )
             self._dragging = False
+            # toggle select...
+            for prop in self._pending:
+                if( (prop in self._selected) and invert ):
+                    self._selected.remove( prop )
+                else:
+                    self._selected.append( prop )
+            self._pending = []
+            for prop in self._selected:
+                print( "high_light {}".format( prop.text() ) )
         super( PPane, self ).mouseReleaseEvent( event )
         
 class PPopUp( QtGui.QDialog ):
