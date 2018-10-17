@@ -51,6 +51,7 @@ class PIntWidget( QtGui.QSpinBox ):
         self._mousing = False
         # initalize to Default
         self.setValue( self.default )
+        self._last_reason = None
         
     def getPValue( self ):
         if( self.emit_cast is None ):
@@ -96,8 +97,12 @@ class PIntWidget( QtGui.QSpinBox ):
             self.setValue( self.default )
         self._mousing = False
         self.unsetCursor()
+        
+    def focusInEvent( self, event ):
+        self._last_reason = event.reason()
+        super( PIntWidget, self ).focusInEvent( event )
 
-
+        
 class PFloatWidget( QtGui.QLineEdit ):
 
     def __init__( self, parent_app, default, opts=None ):
@@ -119,6 +124,7 @@ class PFloatWidget( QtGui.QLineEdit ):
             for k, v in opts.iteritems():
                 setattr( self, k, v )
         #self.setRange( self.min, self.max )
+        self._last_reason = None
         
     def getPValue( self ):
         fVal = float( self.text() )
@@ -134,7 +140,11 @@ class PFloatWidget( QtGui.QLineEdit ):
         else:
             self.setText( self.recv_cast( sVal ) )
 
-
+    def focusInEvent( self, event ):
+        self._last_reason = event.reason()
+        super( PFloatWidget, self ).focusInEvent( event )
+        
+        
 class PStringWidget( QtGui.QLineEdit ):
     
     def __init__( self, parent_app, default, opts=None ):
@@ -156,6 +166,8 @@ class PStringWidget( QtGui.QLineEdit ):
             val = QtGui.QRegExpValidator( QtCore.QRegExp( self.validator ) )
             self.setValidator( val )
             
+        self._last_reason = None
+         
     def getPValue( self ):
         if( self.emit_cast is None ):
             return self.text()
@@ -167,6 +179,10 @@ class PStringWidget( QtGui.QLineEdit ):
             self.setText( val )
         else:
             self.setText( self.recv_cast( val ) )
+            
+    def focusInEvent( self, event ):
+        self._last_reason = event.reason()
+        super( PStringWidget, self ).focusInEvent( event )
     
     
 class PXChoiceWidget( QtGui.QComboBox ):
@@ -191,6 +207,8 @@ class PXChoiceWidget( QtGui.QComboBox ):
         if( not default is None ):
 				self.setCurrentIndex( self.findText( default ) )
                 
+        self._last_reason = None
+        
     def getPValue( self ):
         idx = self.currentIndex()
         if( self.emit_cast is None ):
@@ -206,8 +224,14 @@ class PXChoiceWidget( QtGui.QComboBox ):
         if( idx < 0 ):
             idx = 0
         self.setCurrentIndex( idx )
-
         
+    def focusInEvent( self, event ):
+        self._last_reason = event.reason()
+        super( PXChoiceWidget, self ).focusInEvent( event )
+        
+        
+KNOWN_P_WIDGETS = ( PXChoiceWidget, PStringWidget, PFloatWidget, PIntWidget )
+
 class PPane( QtGui.QWidget ):
 
     def __init__( self, parent_app, obj, prop_dict, properties, title ):
@@ -260,6 +284,7 @@ class PPane( QtGui.QWidget ):
             self._register[ key ] = widget
             row += 1
         # Finalize
+        QtGui.qApp.focusChanged.connect( self._fccb )
         self.setLayout( tmp_grid )
         
     def _publish( self ):
@@ -272,12 +297,19 @@ class PPane( QtGui.QWidget ):
         
     def mousePressEvent( self, event ):
         recever = self.childAt( event.pos() )
+        invert = bool( QtGui.QApplication.keyboardModifiers() & QtCore.Qt.ControlModifier )
         if( (event.button() & QtCore.Qt.LeftButton) and
             (type( recever ) == PSelectableLabel)
         ):
+            if( invert ):
+                print( "no_light {}".format( recever.text() ) )
+                recever.setStyleSheet( "background-color: None" )
+            else:
+                self._selected = []
             self._dragging = True
             self._pending  = [ recever ]
             print "mid_light {}".format( recever.text() )
+            recever.setStyleSheet( "background-color: gray" )
         super( PPane, self ).mousePressEvent( event )
             
     def mouseMoveEvent( self, event ):
@@ -287,6 +319,7 @@ class PPane( QtGui.QWidget ):
             (self._dragging)
         ):
             print( "mid_light {}".format( recever.text() ) )
+            recever.setStyleSheet( "background-color: gray" )
             self._pending.append( recever )
         super( PPane, self ).mouseMoveEvent( event )
 
@@ -300,14 +333,33 @@ class PPane( QtGui.QWidget ):
             # toggle select...
             for prop in self._pending:
                 if( (prop in self._selected) and invert ):
+                    # deselect case
                     self._selected.remove( prop )
+                    print( "no_light {}".format( prop.text() ) )
+                    prop.setStyleSheet( "background-color: None" )
                 else:
                     self._selected.append( prop )
             self._pending = []
             for prop in self._selected:
                 print( "high_light {}".format( prop.text() ) )
+                prop.setStyleSheet( "background-color: darkGray" )
+            if( len( self._selected ) > 0 ):
+                self._selected[-1].buddy().setFocus( QtCore.Qt.OtherFocusReason )
+            print self._selected
         super( PPane, self ).mouseReleaseEvent( event )
         
+    def _fccb( self, old, new ):
+        if( type( new ) in KNOWN_P_WIDGETS ):
+
+            if( new._last_reason == QtCore.Qt.FocusReason.OtherFocusReason ):
+                return
+            # Deselect
+            for prop in self._selected:
+                print( "no_light {}".format( prop.text() ) )
+                prop.setStyleSheet( "background-color: None" )
+            self._selected = []
+            
+            
 class PPopUp( QtGui.QDialog ):
 
     def __init__( self, parent_app, obj, update_func ):
