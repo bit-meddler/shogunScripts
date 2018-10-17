@@ -22,7 +22,7 @@ class PSelectableLabel( QtGui.QLabel ):
     # I can probably do this at a 'container' level, so may not need to subclass this.
     def __init__( self, text=None, parent=None, f=0 ):
         super( PSelectableLabel, self ).__init__( text, parent, f )
-        # print self.buddy()
+        self.selection_group = None
 
         
 class PIntWidget( QtGui.QSpinBox ):
@@ -52,6 +52,8 @@ class PIntWidget( QtGui.QSpinBox ):
         # initalize to Default
         self.setValue( self.default )
         self._last_reason = None
+        self._my_lab = None
+        self.editingFinished.connect( self._done )
         
     def getPValue( self ):
         if( self.emit_cast is None ):
@@ -97,11 +99,24 @@ class PIntWidget( QtGui.QSpinBox ):
             self.setValue( self.default )
         self._mousing = False
         self.unsetCursor()
+        self.editingFinished.emit()
         
     def focusInEvent( self, event ):
         self._last_reason = event.reason()
         super( PIntWidget, self ).focusInEvent( event )
 
+    def _done( self ):
+        # test for membership of selection
+        parent = self.parent()
+        val = self.value()
+        this = self._my_lab
+        if( this in parent._selected ):
+            for lab in parent._selected:
+                if self == lab: continue
+                widget = lab.buddy()
+                widget.setValue( val )
+        # self.valueChanged.emit( val )
+        
         
 class PFloatWidget( QtGui.QLineEdit ):
 
@@ -234,12 +249,12 @@ KNOWN_P_WIDGETS = ( PXChoiceWidget, PStringWidget, PFloatWidget, PIntWidget )
 
 class PPane( QtGui.QWidget ):
 
-    def __init__( self, parent_app, obj, prop_dict, properties, title ):
+    def __init__( self, parent_app, obj, prop_dict, prop_order, title ):
         super( PPane, self ).__init__()
         self._parent_app = parent_app
         self._obj_ref = obj
         self._pd_ref = prop_dict
-        self._properties = properties
+        self._prop_order = prop_order
         self._selected = []
         self._pending = []
         self._last_selected = None
@@ -249,14 +264,16 @@ class PPane( QtGui.QWidget ):
         self.setWindowTitle( title )
         # TODO: Should I explicity add a scroll-bar?
         tmp_grid = QtGui.QGridLayout()
-        # Properties, Assemble!
+        # prop_order, Assemble!
+        # TODO: Need some way of grouping PSLs, so int->int->!float + Exclude nonsense options
         row = 0
-        for key in self._properties:
+        for key in self._prop_order:
             if( not key in self._pd_ref ):
                 continue
             lbl, tip, p_type, default, opts = self._pd_ref[ key ]
             # Label
             lab = PSelectableLabel( lbl, self )
+            lab.setContentsMargins( 3, 3, 3, 3 )
             tmp_grid.addWidget( lab, row, 0, 1, 1 )
             # input cases
             widget = None
@@ -280,20 +297,28 @@ class PPane( QtGui.QWidget ):
                 continue
             widget.setToolTip( tip )
             lab.setBuddy( widget )
+            widget._my_lab = lab
             tmp_grid.addWidget( widget, row, 1, 1, 1 )
             self._register[ key ] = widget
             row += 1
         # Finalize
+        tmp_grid.setContentsMargins( 2, 1, 2, 1 )
         QtGui.qApp.focusChanged.connect( self._fccb )
         self.setLayout( tmp_grid )
+        self.setContentsMargins( 1, 1, 1, 1 )
         
     def _publish( self ):
         ret = {}
-        for prop in self._properties:
+        for prop in self._prop_order:
             if( not prop in self._register ):
                 continue
             ret[ prop ] = self._register[ prop ].getPValue()
         return ret
+        
+    def _clearLabSelection( self ):
+        for prop in self._selected:
+            prop.setStyleSheet( "background-color: None" )
+        self._selected = []
         
     def mousePressEvent( self, event ):
         recever = self.childAt( event.pos() )
@@ -302,13 +327,11 @@ class PPane( QtGui.QWidget ):
             (type( recever ) == PSelectableLabel)
         ):
             if( invert ):
-                print( "no_light {}".format( recever.text() ) )
                 recever.setStyleSheet( "background-color: None" )
             else:
-                self._selected = []
+                self._clearLabSelection()
             self._dragging = True
             self._pending  = [ recever ]
-            print "mid_light {}".format( recever.text() )
             recever.setStyleSheet( "background-color: gray" )
         super( PPane, self ).mousePressEvent( event )
             
@@ -318,7 +341,6 @@ class PPane( QtGui.QWidget ):
             (not recever in self._pending) and
             (self._dragging)
         ):
-            print( "mid_light {}".format( recever.text() ) )
             recever.setStyleSheet( "background-color: gray" )
             self._pending.append( recever )
         super( PPane, self ).mouseMoveEvent( event )
@@ -335,17 +357,14 @@ class PPane( QtGui.QWidget ):
                 if( (prop in self._selected) and invert ):
                     # deselect case
                     self._selected.remove( prop )
-                    print( "no_light {}".format( prop.text() ) )
                     prop.setStyleSheet( "background-color: None" )
                 else:
                     self._selected.append( prop )
             self._pending = []
             for prop in self._selected:
-                print( "high_light {}".format( prop.text() ) )
                 prop.setStyleSheet( "background-color: darkGray" )
             if( len( self._selected ) > 0 ):
                 self._selected[-1].buddy().setFocus( QtCore.Qt.OtherFocusReason )
-            print self._selected
         super( PPane, self ).mouseReleaseEvent( event )
         
     def _fccb( self, old, new ):
@@ -354,10 +373,7 @@ class PPane( QtGui.QWidget ):
             if( new._last_reason == QtCore.Qt.FocusReason.OtherFocusReason ):
                 return
             # Deselect
-            for prop in self._selected:
-                print( "no_light {}".format( prop.text() ) )
-                prop.setStyleSheet( "background-color: None" )
-            self._selected = []
+            self._clearLabSelection()
             
             
 class PPopUp( QtGui.QDialog ):
@@ -370,8 +386,8 @@ class PPopUp( QtGui.QDialog ):
         self._pw = None
         self.title = None
         
-    def setProps( self, prop_dict, properties, title ):
-        self._pw = PPane( self._parent_app, self._obj_ref, prop_dict, properties, title )
+    def setProps( self, prop_dict, prop_order, title ):
+        self._pw = PPane( self._parent_app, self._obj_ref, prop_dict, prop_order, title )
         self.title = title
         self._buildUI()
         
@@ -402,7 +418,7 @@ class PPopUp( QtGui.QDialog ):
         cancel_but.clicked.connect( self.close )
         
     def _apply( self ):
-        #update self._logic_ref with self._pw.properties
+        #update self._logic_ref with self._pw.prop_order
         vals = self._pw._publish()
         self._update_func( vals )
         self.close()
