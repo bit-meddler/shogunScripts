@@ -22,8 +22,9 @@ class PSelectableLabel( QtGui.QLabel ):
     # I can probably do this at a 'container' level, so may not need to subclass this.
     def __init__( self, text=None, parent=None, f=0 ):
         super( PSelectableLabel, self ).__init__( text, parent, f )
-        self.selection_group = None
-
+        # ui Grouping
+        self.group = None
+        
         
 class PIntWidget( QtGui.QSpinBox ):
 
@@ -67,7 +68,19 @@ class PIntWidget( QtGui.QSpinBox ):
         else:
             self.setValue( self.recv_cast( val ) )
 
-    # Override mouse events to capture clicks
+    def _done( self ):
+        # test for membership of selection
+        parent = self.parent()
+        val = self.value()
+        this = self._my_lab
+        if( this in parent._selected ):
+            for lab in parent._selected:
+                if self == lab: continue
+                widget = lab.buddy()
+                widget.setValue( val )
+        # self.valueChanged.emit( val )
+
+    # TODO: Could the following be done in an event Filter? ##########################
     def mousePressEvent( self, event ):
         super( PIntWidget, self ).mousePressEvent( event )
         if( event.button() & QtCore.Qt.MiddleButton ):
@@ -104,7 +117,50 @@ class PIntWidget( QtGui.QSpinBox ):
     def focusInEvent( self, event ):
         self._last_reason = event.reason()
         super( PIntWidget, self ).focusInEvent( event )
+    # mouse event over-rides ##########################################################
+        
+        
+class PFloatWidget( QtGui.QDoubleSpinBox ):
 
+    def __init__( self, parent_app, default, opts=None ):
+        super( PFloatWidget, self ).__init__( parent_app )
+        self.default = default
+        self.min = -1e-99
+        self.max = 1e99
+        self.step_lo  = 1.
+        self.step_mid = 10.
+        self.step_hi  = 1000.
+        self.step_scale = 16.
+        # adapt for special use
+        self.recv_cast = None
+        self.emit_cast = None
+        self.load_cast = None
+        self.save_cast = None
+        if( not opts is None ):
+            # take the opts
+            for k, v in opts.iteritems():
+                setattr( self, k, v )
+        #self.setRange( self.min, self.max )
+        self.setDecimals( 5 )
+        self._mousing = False
+        self._last_reason = None
+        self._my_lab = None
+        self.editingFinished.connect( self._done )
+        
+    def getPValue( self ):
+        fVal = float( self.value() )
+        if( self.emit_cast is None ):
+            return fVal
+        else:
+            return self.emit_cast( fVal )
+            
+    def setPValue( self, val ):
+        sVal = float( val )
+        if( self.recv_cast is None ):
+            self.setValue( sVal )
+        else:
+            self.setValue( self.recv_cast( sVal ) )
+            
     def _done( self ):
         # test for membership of selection
         parent = self.parent()
@@ -115,50 +171,46 @@ class PIntWidget( QtGui.QSpinBox ):
                 if self == lab: continue
                 widget = lab.buddy()
                 widget.setValue( val )
-        # self.valueChanged.emit( val )
-        
-        
-class PFloatWidget( QtGui.QLineEdit ):
+                
+    # TODO: Could the following be done in an event Filter? ##########################
+    def mousePressEvent( self, event ):
+        super( PFloatWidget, self ).mousePressEvent( event )
+        if( event.button() & QtCore.Qt.MiddleButton ):
+            self._mousing = True
+            self._start_pos = event.pos()
+            self.setCursor( QtCore.Qt.SizeVerCursor )
+            self._startVal = self.value()
 
-    def __init__( self, parent_app, default, opts=None ):
-        super( PFloatWidget, self ).__init__( parent_app )
-        self.default = default
-        self.min = -1e-99
-        self.max = 1e99
-        self.step_lo  = 1
-        self.step_mid = 10
-        self.step_hi  = 1000
-        # adapt for special use
-        self.recv_cast = None
-        self.emit_cast = None
-        self.load_cast = None
-        self.save_cast = None
-        
-        if( not opts is None ):
-            # take the opts
-            for k, v in opts.iteritems():
-                setattr( self, k, v )
-        #self.setRange( self.min, self.max )
-        self._last_reason = None
-        
-    def getPValue( self ):
-        fVal = float( self.text() )
-        if( self.emit_cast is None ):
-            return float( fVal )
-        else:
-            return self.emit_cast( fVal )
+    def mouseMoveEvent( self, event ):
+        if not self._mousing:
+            return
             
-    def setPValue( self, val ):
-        sVal = str( val )
-        if( self.recv_cast is None ):
-            self.setText( sVal )
-        else:
-            self.setText( self.recv_cast( sVal ) )
+        mods = QtGui.QApplication.keyboardModifiers()
+        
+        delta = self.step_mid
+        if( mods & QtCore.Qt.ShiftModifier ):
+            delta = self.step_lo
+        elif( mods & QtCore.Qt.AltModifier ):
+            delta = self.step_hi
+        # TODO: Do this nicely
+        change = ( event.pos().y() - self._start_pos.y() )
+        val = self._startVal + int( -1. * (change/self.step_scale) * delta )
+        self.setValue( val )
 
+    def mouseReleaseEvent( self, event ):
+        super( PFloatWidget, self ).mouseReleaseEvent( event )
+        mods = QtGui.QApplication.keyboardModifiers()
+        if( mods & QtCore.Qt.ControlModifier ):
+            self.setValue( self.default )
+        self._mousing = False
+        self.unsetCursor()
+        self.editingFinished.emit()
+        
     def focusInEvent( self, event ):
         self._last_reason = event.reason()
         super( PFloatWidget, self ).focusInEvent( event )
-        
+    # mouse event over-rides ##########################################################     
+     
         
 class PStringWidget( QtGui.QLineEdit ):
     
@@ -182,7 +234,8 @@ class PStringWidget( QtGui.QLineEdit ):
             self.setValidator( val )
             
         self._last_reason = None
-         
+        self._my_lab = None
+        
     def getPValue( self ):
         if( self.emit_cast is None ):
             return self.text()
@@ -223,6 +276,7 @@ class PXChoiceWidget( QtGui.QComboBox ):
 				self.setCurrentIndex( self.findText( default ) )
                 
         self._last_reason = None
+        self._my_lab = None
         
     def getPValue( self ):
         idx = self.currentIndex()
@@ -274,6 +328,10 @@ class PPane( QtGui.QWidget ):
             # Label
             lab = PSelectableLabel( lbl, self )
             lab.setContentsMargins( 3, 3, 3, 3 )
+            if( not opts is None ):
+                if( "group" in opts ):
+                    lab.group = opts[ "group" ]
+                
             tmp_grid.addWidget( lab, row, 0, 1, 1 )
             # input cases
             widget = None
@@ -306,6 +364,21 @@ class PPane( QtGui.QWidget ):
         QtGui.qApp.focusChanged.connect( self._fccb )
         self.setLayout( tmp_grid )
         self.setContentsMargins( 1, 1, 1, 1 )
+        self._tweakStyle()
+        
+    def _tweakStyle( self ):
+        # states: QPalette.Disabled, QPalette.Active, QPalette.Inactive, QPalette.Normal
+        light = QtGui.QPalette().color( QtGui.QPalette.Active, QtGui.QPalette.Light ).name()
+        mid = QtGui.QPalette().color( QtGui.QPalette.Active, QtGui.QPalette.Midlight ).name()
+        dark = QtGui.QPalette().color( QtGui.QPalette.Active, QtGui.QPalette.Dark ).lighter(110).name()
+        window = QtGui.QPalette().color( QtGui.QPalette.Active, QtGui.QPalette.Window ).name()
+        highlight = QtGui.QPalette().color( QtGui.QPalette.Active, QtGui.QPalette.Highlight ).name()
+        lighthigh = QtGui.QPalette().color( QtGui.QPalette.Active, QtGui.QPalette.Highlight ).lighter().name()
+        self._style_highlight = "background-color: {}".format( highlight )
+        self._style_normal = "background-color: {}".format( window ) # none
+        self._style_light = "background-color: {}".format( mid )
+        self._style_selected = "background-color: {}".format( dark )
+        self._style_was_highlighted = "background-color: {}".format( lighthigh )
         
     def _publish( self ):
         ret = {}
@@ -317,22 +390,30 @@ class PPane( QtGui.QWidget ):
         
     def _clearLabSelection( self ):
         for prop in self._selected:
-            prop.setStyleSheet( "background-color: None" )
+            prop.setStyleSheet( self._style_normal )
         self._selected = []
         
+    def _softLightPending( self ):
+        for prop in self._pending:
+            if( prop != self._last_selected ):
+                prop.setStyleSheet( self._style_was_highlighted )
+            
     def mousePressEvent( self, event ):
         recever = self.childAt( event.pos() )
         invert = bool( QtGui.QApplication.keyboardModifiers() & QtCore.Qt.ControlModifier )
         if( (event.button() & QtCore.Qt.LeftButton) and
             (type( recever ) == PSelectableLabel)
         ):
+            if( recever.group == None ):
+                return
             if( invert ):
-                recever.setStyleSheet( "background-color: None" )
+                recever.setStyleSheet( self._style_highlight )
             else:
                 self._clearLabSelection()
+                recever.setStyleSheet( self._style_highlight )
             self._dragging = True
             self._pending  = [ recever ]
-            recever.setStyleSheet( "background-color: gray" )
+            self._last_selected = recever
         super( PPane, self ).mousePressEvent( event )
             
     def mouseMoveEvent( self, event ):
@@ -341,8 +422,12 @@ class PPane( QtGui.QWidget ):
             (not recever in self._pending) and
             (self._dragging)
         ):
-            recever.setStyleSheet( "background-color: gray" )
+            if( recever.group == None ):
+                return
+            self._last_selected = recever
+            recever.setStyleSheet( self._style_highlight )
             self._pending.append( recever )
+            self._softLightPending()
         super( PPane, self ).mouseMoveEvent( event )
 
     def mouseReleaseEvent( self, event ):
@@ -357,20 +442,28 @@ class PPane( QtGui.QWidget ):
                 if( (prop in self._selected) and invert ):
                     # deselect case
                     self._selected.remove( prop )
-                    prop.setStyleSheet( "background-color: None" )
+                    prop.setStyleSheet( self._style_normal )
                 else:
                     self._selected.append( prop )
             self._pending = []
             for prop in self._selected:
-                prop.setStyleSheet( "background-color: darkGray" )
-            if( len( self._selected ) > 0 ):
+                prop.setStyleSheet( self._style_selected )
+                
+            num_sel = len( self._selected )
+            if( num_sel > 0 ):
                 self._selected[-1].buddy().setFocus( QtCore.Qt.OtherFocusReason )
+            if( num_sel == 1 ):
+                self._selected[0].setStyleSheet( self._style_normal )
+                
         super( PPane, self ).mouseReleaseEvent( event )
         
     def _fccb( self, old, new ):
         if( type( new ) in KNOWN_P_WIDGETS ):
 
             if( new._last_reason == QtCore.Qt.FocusReason.OtherFocusReason ):
+                return
+            if( new._my_lab in self._selected ):
+                # Allow focus change with selected Properties
                 return
             # Deselect
             self._clearLabSelection()
@@ -435,6 +528,7 @@ if( __name__ == "__main__" ):
             1,
             { "min" :  1,
               "max" : 10,
+              "group": "xform",
             } ],
         "t_y" : [
             "Translate Y",
@@ -443,6 +537,7 @@ if( __name__ == "__main__" ):
             1,
             { "min" :  1,
               "max" : 10,
+              "group": "xform",
             } ],
         "t_z" : [
             "Translate Z",
@@ -451,6 +546,7 @@ if( __name__ == "__main__" ):
             1,
             { "min" :  1,
               "max" : 10,
+              "group": "xform",
             } ],
          "r_x" : [
             "Rotate X",
@@ -459,6 +555,7 @@ if( __name__ == "__main__" ):
             1,
             { "min" :  1,
               "max" : 10,
+              "group": "xform",
             } ],
         "r_y" : [
             "Rotate Y",
@@ -467,6 +564,7 @@ if( __name__ == "__main__" ):
             1,
             { "min" :  1,
               "max" : 10,
+              "group": "xform",
             } ],
         "r_z" : [
             "Rotate Z",
@@ -475,6 +573,7 @@ if( __name__ == "__main__" ):
             1,
             { "min" :  1,
               "max" : 10,
+              "group": "xform",
             } ],
         "s_x" : [
             "Scale X",
@@ -483,6 +582,7 @@ if( __name__ == "__main__" ):
             1,
             { "min" :    1,
               "max" : 1000,
+              "group": "xform",
             } ],
         "s_y" : [
             "Scale Y",
@@ -491,6 +591,7 @@ if( __name__ == "__main__" ):
             2,
             { "min" :    1,
               "max" : 1000,
+              "group": "xform",
             } ],
         "s_z" : [
             "Scale Z",
@@ -499,6 +600,7 @@ if( __name__ == "__main__" ):
             3,
             { "min" :    1,
               "max" : 1000,
+              "group": "xform",
             } ],
     }
     prop_order = [ 't_x', 't_y', 't_z', 'r_x', 'r_y', 'r_z', 's_x', 's_y', 's_z' ]
