@@ -16,7 +16,7 @@
 # Also [Ctrl] + [LMB-Click] resets to default.
 
 from PySide import QtGui, QtCore
-
+import re
 
 class PSelectableLabel( QtGui.QLabel ):
     # I can probably do this at a 'container' level, so may not need to subclass this.
@@ -79,7 +79,7 @@ class PIntWidget( QtGui.QSpinBox ):
                 widget = lab.buddy()
                 widget.setValue( val )
         # self.valueChanged.emit( val )
-
+        
     # TODO: Could the following be done in an event Filter? ##########################
     def mousePressEvent( self, event ):
         super( PIntWidget, self ).mousePressEvent( event )
@@ -103,7 +103,7 @@ class PIntWidget( QtGui.QSpinBox ):
         # TODO: Do this nicely
         change = ( event.pos().y() - self._start_pos.y() )
         val = self._startVal + int( -1. * (change/self.step_scale) * delta )
-        self.setValue( val )
+        #self.setValue( val )
 
     def mouseReleaseEvent( self, event ):
         super( PIntWidget, self ).mouseReleaseEvent( event )
@@ -120,10 +120,63 @@ class PIntWidget( QtGui.QSpinBox ):
     # mouse event over-rides ##########################################################
         
         
+class PMathValidator( QtGui.QValidator ):
+    """
+        Accept Scientific notation in the lineEdit.
+        Also interprets basic expressions ( +=, -=, /=, *=) followed by a value
+        which may also be in scientific notation
+    """
+    def __init__( self ):
+        self._floatOK = re.compile( r"(([+\-*\\]\=)?([+-]?\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?)" )
+        
+    def _test( self, text ):
+        matched = self._floatOK.search( text )
+        if matched: #Guard for Non-Matching
+            return (matched.groups()[ 0 ] == text)
+        else:
+            return False
+    
+    def validate( self, text, pos ):
+        if( self._test( text ) ):
+            return self.State.Acceptable
+        elif( (text=="") or (text[ pos-1 ] in 'e.-+/*=') ):
+            return self.State.Intermediate
+            
+        return self.State.Invalid
+        
+    def valueFromText( self, text, previous=0. ):
+        matched = self._floatOK.search( text )
+        match, expression, mantissa, _, exponent = matched.groups()
+        value = previous
+        if( not expression is None ):
+            mantissa = 1  if mantissa == None else mantissa
+            exponent = "" if exponent == None else exponent
+            change = float( mantissa + exponent ) #rebuild sci notation
+            if( expression == "+=" ):
+                value += change
+            elif( expression == "-=" ):
+                value -= change
+            elif( expression == "*=" ):
+                value *= change
+            elif( expression == "/=" ):
+                value /= change
+        else:
+            value = float( match )
+        return value
+        
+    def fixup( self, text ):
+        matched = self._floatOK.search( text )
+        if matched: #Guard for Non-Matching
+            return matched.groups()[ 0 ]
+        else:
+            return ""
+        
+        
 class PFloatWidget( QtGui.QDoubleSpinBox ):
 
     def __init__( self, parent_app, default, opts=None ):
         super( PFloatWidget, self ).__init__( parent_app )
+        self._mousing = False
         self.default = default
         self.min = -1e-99
         self.max = 1e99
@@ -141,8 +194,8 @@ class PFloatWidget( QtGui.QDoubleSpinBox ):
             for k, v in opts.iteritems():
                 setattr( self, k, v )
         #self.setRange( self.min, self.max )
+        self.validator = PMathValidator()
         self.setDecimals( 5 )
-        self._mousing = False
         self._last_reason = None
         self._my_lab = None
         self.editingFinished.connect( self._done )
@@ -172,6 +225,23 @@ class PFloatWidget( QtGui.QDoubleSpinBox ):
                 widget = lab.buddy()
                 widget.setValue( val )
                 
+    def validate( self, text, position ):
+        if( self._mousing ): # Skip validation while dialing
+            return self.validator.State.Intermediate
+            
+        return self.validator.validate( text, position )
+
+    def fixup( self, text ):
+        return self.validator.fixup( text )
+
+    def valueFromText( self, text ):
+        return self.validator.valueFromText( text, self._startVal )
+
+    def setValue( self, val ):
+        #print "setting", val
+        self._startVal = val
+        super( PFloatWidget, self ).setValue( val )
+        
     # TODO: Could the following be done in an event Filter? ##########################
     def mousePressEvent( self, event ):
         super( PFloatWidget, self ).mousePressEvent( event )
@@ -195,8 +265,9 @@ class PFloatWidget( QtGui.QDoubleSpinBox ):
         # TODO: Do this nicely
         change = ( event.pos().y() - self._start_pos.y() )
         val = self._startVal + int( -1. * (change/self.step_scale) * delta )
-        self.setValue( val )
-
+        #self.setValue( val )
+        self.lineEdit().setText( str( val ) )
+        
     def mouseReleaseEvent( self, event ):
         super( PFloatWidget, self ).mouseReleaseEvent( event )
         mods = QtGui.QApplication.keyboardModifiers()
